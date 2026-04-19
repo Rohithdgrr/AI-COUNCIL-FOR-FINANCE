@@ -32,6 +32,7 @@ from backend.routes.market import router as market_router
 from backend.routes.observability import router as observability_router
 from backend.routes.council_v2 import router as council_v2_router
 from backend.routes.mcp_manifest import router as mcp_manifest_router
+from backend.routes.simulation import router as simulation_router
 from backend.ws.server import websocket_endpoint
 
 # Setup structured JSON logging
@@ -126,6 +127,7 @@ app.include_router(rag_router, prefix="/rag", tags=["RAG"])
 app.include_router(market_router, tags=["Market"])
 app.include_router(observability_router, prefix="/observability", tags=["Observability"])
 app.include_router(mcp_manifest_router, prefix="/mcp", tags=["MCP Manifest"])
+app.include_router(simulation_router, prefix="/simulation", tags=["Simulation"])
 
 # WebSocket
 app.websocket("/ws")(websocket_endpoint)

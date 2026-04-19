@@ -1,12 +1,14 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Send, StopCircle, Sparkles, ShieldCheck, Loader2, ChevronLeft, Check, Zap, Crown, Database, Globe, Cpu, BookOpen } from 'lucide-react'
 import { useCouncilV2Stream } from '@/hooks/useCouncilV2Stream'
 import { useCouncilV2Store } from '@/store/councilV2Store'
+import { useSettingsStore } from '@/store/settingsStore'
 import type { PipelineStageKey, PipelineStageState } from '@/store/councilV2Store'
 import { COUNCIL_AGENTS } from '@/types/council'
 import type { AgentInfo, AgentStatus, ModeratorResult } from '@/types/council'
 import MarkdownRenderer from '@/components/shared/MarkdownRenderer'
 import CitedMarkdownRenderer from '@/components/shared/CitedMarkdownRenderer'
+import LiteModePanel from '@/components/shared/LiteModePanel'
 
 // ── Pipeline Stage Panel ──────────────────────────────────────────────────────
 const STAGE_CONFIG: Record<PipelineStageKey, { label: string; icon: React.ReactNode; color: string; bg: string }> = {
@@ -256,22 +258,43 @@ export default function Chat() {
   const [query, setQuery] = useState('')
   const { startStream, stopStream } = useCouncilV2Stream()
   const store = useCouncilV2Store()
+  const { settings, updateSettings } = useSettingsStore()
   const isStreaming = store.isStreaming
+
+  // Sync lite mode settings to store on change
+  useEffect(() => {
+    // Settings are read directly from settingsStore in handleSubmit
+  }, [settings.lite_mode, settings.lite_primary_agent])
 
   const {
     currentRound, agents, moderatorR1, moderatorR2, supervisorResult,
-    selectedAgent, viewMode, streamError, citationMaps, pipelineStages,
+    selectedAgent, viewMode, streamError, citationMaps, pipelineStages, discoveredSources,
+    liteMode, liteSupportAgents, supportEvidence, evidenceBundle, supportAgentPolicy,
   } = store
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!query.trim() || isStreaming) return
-    startStream(query.trim())
+
+    const currentSettings = useSettingsStore.getState().settings
+    const liteMode = currentSettings.lite_mode
+    const primaryAgent = liteMode ? currentSettings.lite_primary_agent : undefined
+    const supportAgents = liteMode && primaryAgent
+      ? COUNCIL_AGENTS.map((agent) => agent.key).filter((agentKey) => agentKey !== primaryAgent).slice(0, 5)
+      : undefined
+
+    startStream(query.trim(), {
+      liteMode,
+      primaryAgent,
+      supportAgents,
+      supportAgentPolicy: currentSettings.support_agent_policy,
+    })
   }
 
   const activeRoundKey = currentRound <= 1 ? 'round1' : 'round2'
   const selectedAgentInfo = COUNCIL_AGENTS.find((a) => a.key === selectedAgent)
   const selectedAgentState = selectedAgent ? agents[selectedAgent] : null
+  const litePrimaryInfo = selectedAgentInfo || COUNCIL_AGENTS.find((a) => a.key === settings.lite_primary_agent) || COUNCIL_AGENTS[0]
 
   const handleTabClick = (agentKey: string) => {
     if (selectedAgent === agentKey && viewMode === 'agent') {
@@ -282,6 +305,29 @@ export default function Chat() {
   }
 
   const getMainContent = () => {
+    if (liteMode && litePrimaryInfo) {
+      const supportAgentKeys = liteSupportAgents.length
+        ? liteSupportAgents
+        : COUNCIL_AGENTS.map((a) => a.key).filter((key) => key !== litePrimaryInfo.key).slice(0, 5)
+
+      return (
+        <LiteModePanel
+          primaryAgentInfo={litePrimaryInfo}
+          supportAgentKeys={supportAgentKeys}
+          agents={agents}
+          discoveredSources={discoveredSources}
+          isStreaming={isStreaming}
+          supportEvidence={supportEvidence}
+          evidenceBundle={evidenceBundle}
+          citationMaps={citationMaps}
+          pipelineStages={pipelineStages}
+          supportAgentPolicy={supportAgentPolicy}
+          subagentEvidence={store.subagentEvidence}
+          activeSubagents={store.activeSubagents}
+        />
+      )
+    }
+
     if (viewMode === 'supervisor' && supervisorResult) {
       return <SupervisorPanel output={supervisorResult.output} confidence={supervisorResult.confidence} />
     }
@@ -370,6 +416,8 @@ export default function Chat() {
   }
 
   const hasStarted = currentRound > 0 || isStreaming
+  const liteModeEnabled = settings.lite_mode
+  const primaryAgent = settings.lite_primary_agent || 'risk'
 
   return (
     <div className="flex flex-col h-[calc(100vh)] bg-slate-50 relative overflow-hidden z-0">
@@ -379,13 +427,13 @@ export default function Chat() {
       <div className="flex flex-1 overflow-hidden relative">
         {/* Left: Main Content */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-6">
+          <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-6 pb-48">
             {streamError && (
               <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">{streamError}</div>
             )}
 
-            {/* Pipeline animation panel — shown while fetching data */}
-            {isStreaming && <PipelinePanel stages={pipelineStages} />}
+            {/* Pipeline animation panel — shown while fetching data (hidden in lite mode to avoid duplicate with LiteModePanel) */}
+            {isStreaming && !liteMode && <PipelinePanel stages={pipelineStages} />}
 
             {hasStarted ? getMainContent() : (
               <div className="flex flex-col items-center justify-center h-full text-gray-400">
@@ -410,41 +458,106 @@ export default function Chat() {
             )}
           </div>
 
-          {/* Input */}
-          <div className="px-4 sm:px-8 py-5 border-t border-gray-200/60 bg-white/60 backdrop-blur-2xl relative z-20">
-            <form onSubmit={handleSubmit} className="max-w-4xl mx-auto w-full">
-              <div className="relative group">
-                <div className="absolute -inset-px bg-gradient-to-r from-blue-500 to-violet-500 rounded-xl opacity-0 group-focus-within:opacity-20 blur transition-opacity duration-500" />
-                <div className="relative flex items-center bg-white border border-gray-200 rounded-xl shadow-sm group-focus-within:border-blue-300 group-focus-within:shadow-[0_0_0_3px_rgba(59,130,246,0.1)] transition-all duration-300">
-                  <input
-                    type="text"
+          {/* Input (fixed) */}
+          <div className="fixed bottom-0 left-0 right-0 z-50">
+            <div className="px-4 sm:px-6 pb-4 pt-3 bg-white/80 backdrop-blur-xl border-t border-gray-200">
+              <div className="max-w-6xl mx-auto">
+                <div className="bg-white border border-gray-200 rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.08)] overflow-hidden">
+              <form onSubmit={handleSubmit} className="flex flex-col">
+                {/* Text Input Area */}
+                <div className="px-5 pt-4 pb-2">
+                  <textarea
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     placeholder="Ask the council a complex supply chain question..."
-                    className="flex-1 bg-transparent px-5 py-3.5 text-[15px] font-medium text-gray-900 placeholder:text-gray-400 placeholder:font-heading focus:outline-none"
+                    className="w-full bg-transparent text-[15px] font-medium text-gray-900 placeholder:text-gray-400 focus:outline-none resize-none min-h-[44px] max-h-[220px]"
+                    rows={1}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault()
+                        if (query.trim() && !isStreaming) handleSubmit(e as any)
+                      }
+                    }}
                     disabled={isStreaming}
                   />
-                  {isStreaming ? (
-                    <button type="button" onClick={stopStream}
-                      className="shrink-0 mr-2 flex items-center gap-2 px-4 py-2 bg-red-500 hover:bg-red-600 rounded-lg text-white text-[13px] font-heading font-semibold transition-all duration-200 shadow-sm">
-                      <StopCircle className="w-4 h-4" />
-                      Stop
+                </div>
+
+                {/* Footer Actions */}
+                <div className="px-4 pb-4 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => updateSettings({ lite_mode: !liteModeEnabled })}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold uppercase tracking-wider border transition-all ${
+                        liteModeEnabled
+                          ? 'bg-violet-50 border-violet-200 text-violet-600'
+                          : 'bg-gray-50 border-gray-100 text-gray-400'
+                      }`}
+                    >
+                      <Zap className={`w-3 h-3 ${liteModeEnabled ? 'fill-violet-500' : ''}`} />
+                      Lite Mode {liteModeEnabled ? 'On' : 'Off'}
                     </button>
-                  ) : (
-                    <button type="submit" disabled={!query.trim()}
-                      className="shrink-0 mr-2 flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-700 hover:to-violet-700 rounded-lg text-white text-[13px] font-heading font-semibold transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed shadow-sm shadow-blue-500/20">
-                      <Send className="w-4 h-4" />
-                      Run
-                    </button>
-                  )}
+
+                  {/* Primary Agent / Active Agent Selection */}
+                  <div className="flex items-center gap-1.5 ml-1">
+                    {COUNCIL_AGENTS.map((agent) => {
+                      const isActive = primaryAgent === agent.key
+                      const initials = agent.label.split(' ').map(n => n[0]).join('')
+                      return (
+                        <button
+                          key={agent.key}
+                          type="button"
+                          onClick={() => updateSettings({ lite_primary_agent: agent.key })}
+                          className={`w-7 h-7 flex items-center justify-center rounded-lg text-[10px] font-bold transition-all border ${
+                            isActive
+                              ? 'shadow-sm'
+                              : 'bg-white text-gray-400 border-gray-100 hover:border-gray-200'
+                          }`}
+                          style={isActive ? { 
+                            backgroundColor: `${agent.hexColor}10`, 
+                            borderColor: agent.hexColor,
+                            color: agent.hexColor
+                          } : undefined}
+                          title={agent.label}
+                        >
+                          {initials}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    {isStreaming ? (
+                      <button
+                        type="button"
+                        onClick={stopStream}
+                        className="flex items-center gap-1.5 px-5 py-2 bg-red-500 hover:bg-red-600 rounded-2xl text-white text-xs font-bold transition-all duration-200 shadow-sm"
+                      >
+                        <StopCircle className="w-3.5 h-3.5" />
+                        Stop
+                      </button>
+                    ) : (
+                      <button
+                        type="submit"
+                        disabled={!query.trim()}
+                        className="flex items-center gap-1.5 px-5 py-2 bg-gradient-to-r from-gray-900 to-black hover:from-black hover:to-gray-900 disabled:bg-gray-100 disabled:text-gray-300 rounded-2xl text-white text-xs font-bold transition-all duration-200 shadow-sm"
+                      >
+                        <Send className="w-3.5 h-3.5" />
+                        Run
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </form>
                 </div>
               </div>
-            </form>
+            </div>
           </div>
         </div>
 
         {/* Right: Agent Tabs */}
-        {hasStarted && (
+        {hasStarted && !liteMode && (
           <div className="hidden md:flex flex-col items-end justify-center gap-2 pr-0 pl-2 py-4 z-10">
             {COUNCIL_AGENTS.map((agent) => {
               const state = agents[agent.key]
@@ -481,8 +594,28 @@ export default function Chat() {
           </div>
         )}
 
+        {hasStarted && liteMode && litePrimaryInfo && (
+          <div className="hidden md:flex flex-col items-end justify-center gap-2 pr-0 pl-2 py-4 z-10">
+            {COUNCIL_AGENTS.filter((agent) => agent.key !== litePrimaryInfo.key).slice(0, 5).map((agent) => {
+              const state = agents[agent.key]
+              if (!state) return null
+              const roundState = state.round1
+              const isActive = liteSupportAgents.includes(agent.key)
+              return (
+                <button key={agent.key} onClick={() => handleTabClick(agent.key)}
+                  className="w-[160px] h-12 flex items-center gap-2 px-3 rounded-l-xl text-left transition-all duration-300 border border-r-0 bg-white"
+                  style={{ borderColor: isActive ? `${agent.hexColor}40` : '#e5e7eb', borderLeftWidth: '3px', borderLeftColor: isActive ? agent.hexColor : '#e5e7eb' }}>
+                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: agent.hexColor }} />
+                  <span className="text-[13px] font-semibold truncate" style={{ color: agent.hexColor }}>{agent.label}</span>
+                  <StatusIndicator status={roundState.status} color={agent.hexColor} />
+                </button>
+              )
+            })}
+          </div>
+        )}
+
         {/* Mobile: Bottom agent drawer */}
-        {hasStarted && (
+        {hasStarted && !liteMode && false && (
           <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-200 shadow-lg">
             <div className="flex overflow-x-auto gap-2 p-2">
               {COUNCIL_AGENTS.map((agent) => {
@@ -515,6 +648,26 @@ export default function Chat() {
                   <ShieldCheck className="w-3 h-3" /> Supervisor
                 </button>
               )}
+            </div>
+          </div>
+        )}
+
+        {false && (
+          <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-200 shadow-lg">
+            <div className="flex overflow-x-auto gap-2 p-2">
+              {COUNCIL_AGENTS.filter((agent) => agent.key !== (litePrimaryInfo?.key ?? '')).slice(0, 5).map((agent) => {
+                const state = agents[agent.key]
+                if (!state) return null
+                const roundState = state.round1
+                return (
+                  <button key={agent.key} onClick={() => handleTabClick(agent.key)}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold whitespace-nowrap border transition-all duration-200 shrink-0"
+                    style={{ backgroundColor: 'white', borderColor: agent.hexColor, color: agent.hexColor }}>
+                    <StatusIndicator status={roundState.status} color={agent.hexColor} />
+                    {agent.label}
+                  </button>
+                )
+              })}
             </div>
           </div>
         )}

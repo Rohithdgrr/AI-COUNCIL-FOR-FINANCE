@@ -1,10 +1,12 @@
 services:
+  # ── Core Services ──────────────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    command: redis-server --bind 0.0.0.0
 
   neo4j:
     image: neo4j:5-community
@@ -23,10 +25,55 @@ services:
     volumes:
       - chroma_data:/chroma/chroma
 
-  # Firecrawl self-hosted — run from firecrawl/ directory instead:
-  #   cd firecrawl && docker compose up -d
-  # This provides unlimited web scraping at http://localhost:3002
-  # Set FIRECRAWL_BASE_URL=http://localhost:3002 in .env
+  # ── Firecrawl Self-Hosted (with Lightpanda browser) ────────────────────────
+  lightpanda:
+    image: lightpanda/browser:nightly
+    restart: unless-stopped
+    networks:
+      - default
+
+  firecrawl-api:
+    image: trieve/firecrawl:latest
+    depends_on:
+      - redis
+      - lightpanda
+    ports:
+      - "3002:3002"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - REDIS_RATE_LIMIT_URL=redis://redis:6379
+      - PLAYWRIGHT_MICROSERVICE_URL=http://lightpanda:9222
+      - PORT=3002
+      - NUM_WORKERS_PER_QUEUE=4
+      - BULL_AUTH_KEY=CHANGEME
+      - HOST=0.0.0.0
+      - LOGGING_LEVEL=info
+      - MAX_RAM=0.95
+      - MAX_CPU=0.95
+      - COREPACK_INTEGRITY_KEYS=0
+      - COREPACK_ENABLE_AUTO_PIN=0
+    command: ["sh", "-c", "corepack enable && corepack prepare pnpm@9.15.4 --activate && pnpm run start:production"]
+
+  firecrawl-worker:
+    image: trieve/firecrawl:latest
+    depends_on:
+      - redis
+      - lightpanda
+      - firecrawl-api
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - REDIS_RATE_LIMIT_URL=redis://redis:6379
+      - PLAYWRIGHT_MICROSERVICE_URL=http://lightpanda:9222
+      - PORT=3002
+      - NUM_WORKERS_PER_QUEUE=4
+      - BULL_AUTH_KEY=CHANGEME
+      - HOST=0.0.0.0
+      - LOGGING_LEVEL=info
+      - MAX_RAM=0.95
+      - MAX_CPU=0.95
+      - COREPACK_INTEGRITY_KEYS=0
+      - COREPACK_ENABLE_AUTO_PIN=0
+    command: ["sh", "-c", "corepack enable && corepack prepare pnpm@9.15.4 --activate && pnpm run workers"]
 
 volumes:
   redis_data:

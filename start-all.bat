@@ -12,7 +12,7 @@ if %errorlevel% neq 0 (
     echo   WARNING: Docker compose failed. Ensure Docker Desktop is running.
     echo   Run manually: docker compose up -d redis neo4j chromadb
 ) else (
-    echo   OK: Redis (6379), Neo4j (7474/7687), ChromaDB (8001)
+    echo   OK: Redis, Neo4j, and ChromaDB are running
 )
 echo.
 

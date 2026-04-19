@@ -96,6 +96,20 @@ class LLMRouter:
                 logger.warning(f"Stream {model_key} failed for {agent}: {e}")
                 continue
 
+        # If all streaming providers fail, fall back to a non-streaming invocation.
+        # This avoids breaking the whole pipeline due to streaming-only issues.
+        try:
+            response, model_key = await self.invoke_with_fallback(agent, messages)
+            text = getattr(response, "content", None) or str(response)
+            if text:
+                logger.warning(
+                    f"Streaming unavailable for {agent}; fell back to non-streaming model {model_key}"
+                )
+                yield text
+                return
+        except Exception as e:
+            logger.error(f"Non-streaming fallback also failed for {agent}: {e}")
+
         raise RuntimeError(f"All LLM streaming providers failed for agent {agent}")
 
 

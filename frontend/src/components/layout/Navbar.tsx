@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { Shield, MessageSquare, Eye, Settings, Wifi, WifiOff, Menu, X, Activity, Zap, Wrench, BookOpen } from 'lucide-react'
+import { Shield, MessageSquare, Eye, Settings, Wifi, WifiOff, Menu, X, Activity, Zap, Wrench, Fish } from 'lucide-react'
 import { healthApi } from '@/lib/api'
 import Dock from '@/components/ui/Dock'
 
@@ -8,7 +8,7 @@ const navItems = [
   { path: '/', label: 'Dashboard', icon: Shield },
   { path: '/chat', label: 'Council Chat', icon: MessageSquare },
   { path: '/mcp', label: 'MCP Explorer', icon: Wrench },
-  { path: '/rag', label: 'RAG Explorer', icon: BookOpen },
+  { path: '/rag', label: 'Swarm Visualizer', icon: Fish },
   { path: '/brand', label: 'Brand Intel', icon: Eye },
   { path: '/settings', label: 'Settings', icon: Settings },
 ]

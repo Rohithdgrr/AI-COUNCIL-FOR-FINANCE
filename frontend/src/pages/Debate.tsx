@@ -2,12 +2,14 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
   Crown, RotateCcw, Users, 
-  Zap, BarChart3, MessageSquare, ArrowRight, StopCircle
+  Zap, BarChart3, MessageSquare, ArrowRight, StopCircle, Fish
 } from "lucide-react"
 import { useCouncilV2Store } from '@/store/councilV2Store'
 import { useCouncilV2Stream } from '@/hooks/useCouncilV2Stream'
+import { useSettingsStore } from '@/store/settingsStore'
 import { AGENTS_CONFIG } from '@/config/agents.config'
 import { COUNCIL_AGENTS } from '@/types/council'
+import type { AgentInfo } from '@/types/council'
 import AgentCard from '@/components/shared/AgentCard'
 import RoundTab from '@/components/shared/RoundTab'
 import ModelBadge from '@/components/shared/ModelBadge'
@@ -15,6 +17,7 @@ import CitedMarkdownRenderer from '@/components/shared/CitedMarkdownRenderer'
 import AnimatedList from '@/components/shared/AnimatedList'
 import AnimatedSourceLinks from '@/components/shared/AnimatedSourceLinks'
 import SourcesPanel from '@/components/shared/SourcesPanel'
+import LiteModePanel from '@/components/shared/LiteModePanel'
 import { toast } from '@/components/shared/Toast'
 
 const ROUND_CONFIG = [
@@ -46,8 +49,10 @@ export default function Debate() {
   const { 
     currentRound, agents, moderatorR1, moderatorR2,
     supervisorResult, viewMode,
-    isStreaming, reset, citationMaps, pipelineStages, discoveredSources
+    isStreaming, reset, citationMaps, pipelineStages, discoveredSources,
+    liteMode, liteSupportAgents, supportEvidence, evidenceBundle, supportAgentPolicy,
   } = store
+  const { settings, updateSettings } = useSettingsStore()
 
   const { startStream, stopStream } = useCouncilV2Stream()
   const [queryInput, setQueryInput] = useState('')
@@ -70,7 +75,13 @@ export default function Debate() {
   const handleQuerySubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!queryInput.trim() || isStreaming) return
-    startStream(queryInput.trim())
+    const currentSettings = useSettingsStore.getState().settings
+    const isLite = currentSettings.lite_mode
+    const primaryAgent = isLite ? currentSettings.lite_primary_agent : undefined
+    const supportAgents = isLite && primaryAgent
+      ? COUNCIL_AGENTS.map((a) => a.key).filter((k) => k !== primaryAgent).slice(0, 5)
+      : undefined
+    startStream(queryInput.trim(), { liteMode: isLite, primaryAgent, supportAgents })
   }
 
   const handleReset = () => {
@@ -120,6 +131,22 @@ export default function Debate() {
                    onClick={() => setActiveRound(round.number)}
                  />
                ))}
+               {/* MiroFish Swarm Toggle */}
+               <button
+                 onClick={() => updateSettings({ mirofish_enabled: !settings.mirofish_enabled })}
+                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wider transition-all duration-200 ${
+                   settings.mirofish_enabled
+                     ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-lg shadow-cyan-500/20'
+                     : 'bg-white/[0.06] text-white/40 hover:bg-white/[0.1] hover:text-white/60 border border-white/[0.08]'
+                 }`}
+                 title="Toggle MiroFish Swarm simulation for Brand & Market agents after 3 rounds"
+               >
+                 <Fish className="w-3.5 h-3.5" />
+                 <span>MiroFish</span>
+                 {store.mirofishPhase !== 'idle' && (
+                   <span className={`w-1.5 h-1.5 rounded-full ${store.mirofishPhase === 'completed' ? 'bg-emerald-400' : 'bg-cyan-400 animate-pulse'}`} />
+                 )}
+               </button>
             </div>
           </div>
         </div>
@@ -214,6 +241,58 @@ export default function Debate() {
           </div>
         )}
 
+        {/* MIROFISH SWARM PHASE INDICATOR */}
+        {store.mirofishPhase !== 'idle' && (
+          <div className="px-8 py-3 bg-gradient-to-r from-cyan-900/20 to-blue-900/20 border-b border-cyan-500/10">
+            <div className="flex items-center gap-3">
+              <Fish className="w-4 h-4 text-cyan-400" />
+              <span className="text-[11px] font-bold uppercase tracking-wider text-cyan-300">
+                MiroFish Swarm
+              </span>
+              <div className="flex items-center gap-2">
+                {['graph_building', 'persona_generation', 'simulation_running', 'report_generation'].map((phase) => {
+                  const phaseLabels: Record<string, string> = {
+                    graph_building: 'Graph',
+                    persona_generation: 'Personas',
+                    simulation_running: 'Simulation',
+                    report_generation: 'Report',
+                  }
+                  const isPhaseActive = store.mirofishBrandPhase === phase || store.mirofishMarketPhase === phase
+                  const isPhaseDone = ['graph_ready', 'personas_ready', 'completed'].includes(store.mirofishBrandPhase) &&
+                    ['graph_building', 'persona_generation', 'simulation_running', 'report_generation'].indexOf(phase) <
+                    ['graph_building', 'persona_generation', 'simulation_running', 'report_generation'].indexOf(
+                      store.mirofishBrandPhase === 'graph_ready' ? 'persona_generation' :
+                      store.mirofishBrandPhase === 'personas_ready' ? 'simulation_running' :
+                      store.mirofishBrandPhase === 'completed' ? 'report_generation' : store.mirofishBrandPhase
+                    )
+                  return (
+                    <div
+                      key={phase}
+                      className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold transition-all ${
+                        isPhaseActive ? 'bg-cyan-500/30 text-cyan-300 animate-pulse' :
+                        isPhaseDone ? 'bg-emerald-500/20 text-emerald-400' :
+                        'bg-white/5 text-white/20'
+                      }`}
+                    >
+                      {phaseLabels[phase]}
+                    </div>
+                  )
+                })}
+              </div>
+              {store.mirofishPhase === 'completed' && (
+                <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/20 px-2 py-0.5 rounded-full ml-auto">
+                  Swarm Complete — View in Swarm Visualizer
+                </span>
+              )}
+              {store.mirofishPhase !== 'completed' && (
+                <span className="text-[10px] text-cyan-400/60 ml-auto">
+                  Brand & Market agents running multi-persona simulation...
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* CHAT CONTENT */}
         <div className="flex-1 overflow-y-auto px-8 py-8 scrollbar-thin scrollbar-thumb-white/10">
           <AnimatePresence mode="wait">
@@ -234,6 +313,41 @@ export default function Debate() {
                 </p>
                 
                 <form onSubmit={handleQuerySubmit} className="relative group">
+                  {/* Lite Mode Toggle */}
+                  <div className="mb-4 rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <Zap className="w-4 h-4 text-violet-400" />
+                        <span className="text-sm text-white/60 font-medium">Lite Mode</span>
+                        <span className="text-[10px] text-white/30">1 primary + 5 support</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => updateSettings({ lite_mode: !settings.lite_mode })}
+                        className={`relative w-10 h-5 rounded-full transition-colors duration-200 ${settings.lite_mode ? 'bg-violet-600' : 'bg-white/10'}`}
+                      >
+                        <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200 ${settings.lite_mode ? 'translate-x-5' : 'translate-x-0'}`} />
+                      </button>
+                    </div>
+                    {settings.lite_mode && (
+                      <div className="mt-3 flex flex-wrap gap-1.5">
+                        {COUNCIL_AGENTS.map((agent) => {
+                          const isActive = settings.lite_primary_agent === agent.key
+                          return (
+                            <button
+                              key={agent.key}
+                              type="button"
+                              onClick={() => updateSettings({ lite_primary_agent: agent.key })}
+                              className={`px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all ${isActive ? 'text-white border-transparent' : 'bg-white/5 text-white/40 border-white/10 hover:border-white/20'}`}
+                              style={isActive ? { backgroundColor: agent.hexColor, borderColor: agent.hexColor } : undefined}
+                            >
+                              {agent.label}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
                   <input
                     type="text"
                     value={queryInput}
@@ -256,7 +370,33 @@ export default function Debate() {
                 animate={{ opacity: 1 }}
                 className="space-y-6 max-w-4xl mx-auto"
               >
-                {/* AGENT OUTPUTS FOR CURRENT ROUND */}
+                {/* LITE MODE PANEL */}
+                {liteMode && (() => {
+                  const primaryAgentKey = settings.lite_primary_agent || 'risk'
+                  const primaryInfo = (COUNCIL_AGENTS.find((a) => a.key === primaryAgentKey) ?? COUNCIL_AGENTS[0]) as AgentInfo
+                  const supportKeys = liteSupportAgents.length
+                    ? liteSupportAgents
+                    : COUNCIL_AGENTS.map((a) => a.key).filter((k) => k !== primaryInfo.key).slice(0, 5)
+                  return (
+                    <LiteModePanel
+                      primaryAgentInfo={primaryInfo}
+                      supportAgentKeys={supportKeys}
+                      agents={agents}
+                      discoveredSources={discoveredSources}
+                      isStreaming={isStreaming}
+                      supportEvidence={supportEvidence}
+                      evidenceBundle={evidenceBundle}
+                      citationMaps={citationMaps}
+                      pipelineStages={pipelineStages}
+                      supportAgentPolicy={supportAgentPolicy}
+                      subagentEvidence={store.subagentEvidence}
+                      activeSubagents={store.activeSubagents}
+                    />
+                  )
+                })()}
+
+                {/* AGENT OUTPUTS FOR CURRENT ROUND (full council only) */}
+                {!liteMode && (
                 <div className="grid grid-cols-1 gap-6">
                   {COUNCIL_AGENTS.map((agentInfo) => {
                     const agentState = agents[agentInfo.key]
@@ -366,9 +506,10 @@ export default function Debate() {
                     )
                   })}
                 </div>
+                )}
 
-                {/* SUPERVISOR VERDICT */}
-                {supervisorResult && viewMode === 'supervisor' && (
+                {/* SUPERVISOR VERDICT (full council only) */}
+                {!liteMode && supervisorResult && viewMode === 'supervisor' && (
                   <motion.div
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}

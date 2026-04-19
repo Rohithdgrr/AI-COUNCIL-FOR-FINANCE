@@ -178,7 +178,7 @@ describe('councilV2Store', () => {
     const state = useCouncilV2Store.getState()
     expect(state.isStreaming).toBe(false)
     expect(state.currentRound).toBe(3)
-    expect(state.currentPhase).toBe('supervisor')
+    expect(state.currentPhase).toBe('synthesis')
     expect(state.viewMode).toBe('supervisor')
   })
 

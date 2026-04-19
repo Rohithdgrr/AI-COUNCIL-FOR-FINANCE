@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { marketApi } from '@/lib/api'
+import { COUNCIL_AGENTS } from '@/types/council'
 
 type SettingsTab = 'general' | 'response' | 'appearance' | 'notifications' | 'advanced' | 'datasources'
 
@@ -133,6 +134,89 @@ export default function Settings() {
                   </div>
                 ))}
               </div>
+            </div>
+
+            {/* Lite Mode */}
+            <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-card animate-in-up">
+              <h2 className="text-sm font-semibold font-heading text-violet-600 uppercase mb-4 flex items-center gap-2">
+                <Zap className="w-4 h-4" /> Council Lite Mode
+              </h2>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium text-gray-800">One primary agent plus five support agents</p>
+                  <p className="text-xs text-gray-400 mt-0.5 max-w-2xl">
+                    When enabled, new council runs use a faster synthesis path with focused evidence gathering and one final decision-maker.
+                  </p>
+                </div>
+                <button
+                  onClick={() => updateSettings({ lite_mode: !settings.lite_mode })}
+                  className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${settings.lite_mode ? 'bg-violet-600' : 'bg-gray-300'}`}
+                >
+                  <span
+                    className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${
+                      settings.lite_mode ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {settings.lite_mode && (
+                <div className="mt-5">
+                  <label className="text-xs text-gray-500 font-medium uppercase tracking-wider mb-2 block">Primary Agent</label>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    {COUNCIL_AGENTS.map((agent) => {
+                      const active = settings.lite_primary_agent === agent.key
+                      return (
+                        <button
+                          key={agent.key}
+                          onClick={() => updateSettings({ lite_primary_agent: agent.key })}
+                          className={`px-4 py-3 rounded-xl text-sm font-medium transition-all border-2 text-left ${
+                            active
+                              ? 'border-violet-500 bg-violet-50 text-violet-700 shadow-sm'
+                              : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                          }`}
+                        >
+                          <p className="font-semibold">{agent.label}</p>
+                          <p className="text-[11px] mt-1 opacity-70">Primary decision-maker</p>
+                        </button>
+                      )
+                    })}
+                  </div>
+
+                  <label className="text-xs text-gray-500 font-medium uppercase tracking-wider mb-2 mt-5 block">Support Agent Data Sources</label>
+                  <p className="text-[11px] text-gray-400 mb-3">Choose which research channels the 5 support agents use for evidence gathering.</p>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    {([
+                      { key: 'rag', label: 'RAG Knowledge Base', desc: 'Internal vector store' },
+                      { key: 'api', label: 'Live APIs', desc: 'GNews, Alpha Vantage, etc.' },
+                      { key: 'mcp', label: 'MCP Tools', desc: 'Model Context Protocol' },
+                      { key: 'web', label: 'Web Scraping', desc: 'DuckDuckGo, Firecrawl' },
+                      { key: 'graph', label: 'Graph/DB', desc: 'Knowledge graph queries' },
+                    ] as const).map((source) => {
+                      const enabled = settings.support_agent_policy?.[source.key as keyof typeof settings.support_agent_policy] !== false
+                      return (
+                        <button
+                          key={source.key}
+                          onClick={() => updateSettings({
+                            support_agent_policy: {
+                              ...settings.support_agent_policy,
+                              [source.key]: !enabled,
+                            }
+                          })}
+                          className={`px-4 py-3 rounded-xl text-sm font-medium transition-all border-2 text-left ${
+                            enabled
+                              ? 'border-indigo-500 bg-indigo-50 text-indigo-700 shadow-sm'
+                              : 'border-gray-200 bg-white text-gray-400 hover:border-gray-300'
+                          }`}
+                        >
+                          <p className="font-semibold">{source.label}</p>
+                          <p className="text-[11px] mt-1 opacity-70">{source.desc}</p>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* API Keys */}

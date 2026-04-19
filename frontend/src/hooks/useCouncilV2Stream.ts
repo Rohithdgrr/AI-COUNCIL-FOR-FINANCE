@@ -1,14 +1,28 @@
 import { useCallback, useRef } from 'react'
 import { useCouncilV2Store } from '@/store/councilV2Store'
-import type { CouncilV2StreamEvent } from '@/types/council'
+import { useSettingsStore } from '@/store/settingsStore'
+import type { CouncilV2StreamEvent, SupportAgentPolicy } from '@/types/council'
 
 export function useCouncilV2Stream() {
   const { handleV2Event, isStreaming, reset, setStreaming, setStreamError } = useCouncilV2Store()
   const abortRef = useRef<AbortController | null>(null)
 
-  const startStream = useCallback(async (query: string) => {
+  const startStream = useCallback(async (
+    query: string,
+    options?: {
+      liteMode?: boolean
+      primaryAgent?: string
+      supportAgents?: string[]
+      supportAgentPolicy?: SupportAgentPolicy
+    },
+  ) => {
     reset()
     abortRef.current = new AbortController()
+
+    // Resolve policy from options or settings store
+    const settingsPolicy = useSettingsStore.getState().settings.support_agent_policy
+    const policy = options?.supportAgentPolicy ?? settingsPolicy
+    const mirofishEnabled = useSettingsStore.getState().settings.mirofish_enabled
 
     try {
       const apiKey = localStorage.getItem('api_key') || 'dev-key'
@@ -18,7 +32,14 @@ export function useCouncilV2Stream() {
           'Content-Type': 'application/json',
           'X-API-Key': apiKey,
         },
-        body: JSON.stringify({ query }),
+        body: JSON.stringify({
+          query,
+          lite_mode: options?.liteMode ?? false,
+          primary_agent: options?.primaryAgent,
+          support_agents: options?.supportAgents ?? [],
+          support_agent_policy: policy,
+          mirofish_enabled: mirofishEnabled,
+        }),
         signal: abortRef.current.signal,
       })
 

@@ -356,3 +356,53 @@ async def brand_agent(state: CouncilState) -> dict:
                 )
             ]
         }
+
+
+# ── MiroFish Simulation Integration ─────────────────────────────────────────────
+
+async def run_brand_simulation(
+    query: str,
+    horizon_days: int = 30,
+    num_personas: int = 5,
+    rounds: int = 3,
+) -> dict:
+    """Run a MiroFish simulation for brand scenario prediction.
+
+    Examples:
+    - "If a competitor launches a negative campaign, how does sentiment evolve?"
+    - "If we recall a product, how does media coverage spread?"
+    - "If a spokesperson makes a controversial statement, what's the fallout?"
+
+    Args:
+        query: The brand scenario/prediction question
+        horizon_days: Simulation time horizon
+        num_personas: Number of simulated personas
+        rounds: Simulation interaction rounds
+
+    Returns:
+        Simulation result with prediction, confidence, and recommendations
+    """
+    from backend.mirofish.simulation_engine import SimulationEngine
+
+    engine = SimulationEngine()
+    state = await engine.run_quick_simulation(
+        query=query,
+        agent_type="brand",
+        horizon_days=horizon_days,
+        num_personas=num_personas,
+        rounds=rounds,
+    )
+
+    return {
+        "simulation_id": state.id,
+        "status": state.status,
+        "prediction": state.result.prediction if state.result else "Simulation failed",
+        "confidence": state.result.confidence if state.result else 0.0,
+        "key_factors": state.result.key_factors if state.result else [],
+        "risks": state.result.risks if state.result else [],
+        "opportunities": state.result.opportunities if state.result else [],
+        "recommendations": state.result.recommendations if state.result else [],
+        "scenarios": state.result.scenarios if state.result else [],
+        "personas": [f"{p.name} ({p.role.value})" for p in state.personas],
+        "entities": [e.name for e in state.entities],
+    }

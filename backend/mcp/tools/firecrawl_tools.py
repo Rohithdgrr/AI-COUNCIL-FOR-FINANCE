@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 _MAX_RETRIES = 2
 _RETRY_DELAY = 1.0  # seconds between retries
-_CONNECTION_TIMEOUT = 10  # seconds to establish connection
+_CONNECTION_TIMEOUT = 15  # seconds to establish connection
 _READ_TIMEOUT = 60  # seconds to wait for response
 
 
@@ -46,7 +46,7 @@ async def _fc_health_check() -> bool:
         return False
     try:
         base = _get_base_url()
-        async with httpx.AsyncClient(timeout=5, follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
             r = await client.post(f"{base}/scrape", json={"url": "https://example.com", "formats": ["markdown"]}, headers=_get_headers())
             return r.status_code == 200
     except (httpx.ConnectError, httpx.TimeoutException):

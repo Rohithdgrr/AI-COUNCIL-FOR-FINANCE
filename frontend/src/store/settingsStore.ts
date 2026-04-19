@@ -6,6 +6,8 @@ interface AppSettings {
   mcp_api_key: string
   theme: 'dark' | 'light'
   sidebar_collapsed: boolean
+  lite_mode: boolean
+  lite_primary_agent: string
   rag_chunk_size: number
   rag_chunk_overlap: number
   rag_top_k: number
@@ -35,6 +37,16 @@ interface AppSettings {
   enable_web_scraping: boolean
   enable_news_api: boolean
   enable_financial_api: boolean
+  // Lite Mode support agent policy
+  support_agent_policy: {
+    rag: boolean
+    api: boolean
+    mcp: boolean
+    web: boolean
+    graph: boolean
+  }
+  // MiroFish swarm simulation
+  mirofish_enabled: boolean
 }
 
 interface SettingsState {
@@ -50,6 +62,8 @@ const defaultSettings: AppSettings = {
   mcp_api_key: 'dev-mcp-key',
   theme: 'light',
   sidebar_collapsed: false,
+  lite_mode: false,
+  lite_primary_agent: 'risk',
   rag_chunk_size: 512,
   rag_chunk_overlap: 50,
   rag_top_k: 5,
@@ -79,6 +93,16 @@ const defaultSettings: AppSettings = {
   enable_web_scraping: true,
   enable_news_api: true,
   enable_financial_api: true,
+  // Lite Mode support agent policy
+  support_agent_policy: {
+    rag: true,
+    api: true,
+    mcp: true,
+    web: true,
+    graph: true,
+  },
+  // MiroFish swarm simulation
+  mirofish_enabled: false,
 }
 
 export const useSettingsStore = create<SettingsState>()(

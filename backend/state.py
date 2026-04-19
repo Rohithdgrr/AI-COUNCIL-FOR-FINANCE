@@ -76,6 +76,50 @@ class BrandSentiment(BaseModel):
     competitor_activity: Optional[str] = None
 
 
+# ---------------------------------------------------------------------------
+# Lite Mode models
+# ---------------------------------------------------------------------------
+class SupportEvidence(BaseModel):
+    """Structured evidence payload from a lite-mode support subagent."""
+    agent: str
+    role: str = "support"
+    summary: str  # Key findings in 3-5 bullets
+    sources: List[str]  # e.g. ["[1]", "[2]", "[3]"]
+    confidence: int  # 0-100
+    flags: List[str]  # e.g. ["contradiction", "needs_verification"]
+    links: List[str]  # Source URLs
+
+
+class EvidenceBundle(BaseModel):
+    """Merged evidence from all support subagents in lite mode."""
+    support_evidence: List[SupportEvidence]
+    citation_map: dict  # {"[1]": "https://...", ...}
+    data_quality_summary: str
+    conflicts: List[str]
+    source_counts: dict  # {"risk": 5, "supply": 3, ...}
+
+
+class SubagentEvidence(BaseModel):
+    """Structured evidence from a single lite-mode subagent (data-channel + domain hybrid)."""
+    subagent_key: str       # e.g. "risk_rag"
+    parent_agent: str       # e.g. "risk"
+    data_channel: str       # "rag" | "api" | "web" | "mcp" | "graph"
+    domain_hint: str        # Domain focus description
+    summary: str            # Key findings in 3-5 bullets
+    sources: List[str]      # e.g. ["[1]", "[2]", "[3]"]
+    confidence: int         # 0-100
+    flags: List[str]        # e.g. ["contradiction", "needs_verification"]
+    links: List[str]        # Source URLs
+
+
+class LiteModeResult(BaseModel):
+    """Final result from a lite-mode council run."""
+    primary_agent: str
+    evidence_bundle: EvidenceBundle
+    final_answer: str
+    confidence: float
+
+
 def _list_reducer(current: list, update: list) -> list:
     return current + update if current else (update or [])
 
@@ -100,3 +144,9 @@ class CouncilState(TypedDict):
     tiered_fallbacks: Annotated[List[dict], operator.add]  # FallbackOption dicts
     brand_sentiment: Optional[dict]  # BrandSentiment dict
     human_approved: Optional[bool]
+    # Lite Mode additions
+    lite_mode: Optional[bool]
+    primary_agent: Optional[str]
+    support_evidence: Annotated[List[dict], _list_reducer]  # SupportEvidence dicts
+    evidence_bundle: Optional[dict]  # EvidenceBundle dict
+    subagent_evidence: Annotated[List[dict], _list_reducer]  # SubagentEvidence dicts

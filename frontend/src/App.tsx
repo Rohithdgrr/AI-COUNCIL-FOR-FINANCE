@@ -8,7 +8,7 @@ import Brand from './pages/Brand'
 import Debate from './pages/Debate'
 import Settings from './pages/Settings'
 import MCPExplorer from './pages/MCPExplorer'
-import RAGExplorer from './pages/RAGExplorer'
+import SwarmVisualizer from './pages/SwarmVisualizer'
 import NotFound from './pages/NotFound'
 
 const queryClient = new QueryClient({
@@ -30,7 +30,7 @@ function App() {
             <Route path="/debate" element={<Debate />} />
             <Route path="/brand" element={<Brand />} />
             <Route path="/mcp" element={<MCPExplorer />} />
-            <Route path="/rag" element={<RAGExplorer />} />
+            <Route path="/rag" element={<SwarmVisualizer />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

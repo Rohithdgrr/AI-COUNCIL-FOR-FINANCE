@@ -16,6 +16,8 @@ from backend.config import settings
 
 logger = logging.getLogger(__name__)
 
+AGENT_KEYS = ["risk", "supply", "logistics", "market", "finance", "brand"]
+
 
 # ---------------------------------------------------------------------------
 # Dynamic Agent Routing node
@@ -286,6 +288,314 @@ def build_council_graph() -> StateGraph:
 
 
 # ---------------------------------------------------------------------------
+# Lite Mode: Evidence Merge node
+# ---------------------------------------------------------------------------
+@node_error_handler(fallback={"evidence_bundle": None, "support_evidence": [], "subagent_evidence": []})
+async def evidence_merge_node(state: CouncilState) -> dict:
+    """Merge all support agent outputs into a structured EvidenceBundle.
+
+    Handles both legacy support agent outputs and new SubagentEvidence
+    from the hybrid subagent runner.
+    """
+    from backend.state import SupportEvidence, EvidenceBundle, SubagentEvidence
+
+    agent_outputs = state.get("agent_outputs", [])
+    context = state.get("context") or {}
+    primary_agent = state.get("primary_agent") or context.get("primary_agent", "risk")
+
+    # Check if we have subagent evidence (new hybrid approach)
+    existing_subagent_evidence = state.get("subagent_evidence", [])
+
+    all_support_evidence: list[SupportEvidence] = []
+    citation_map: dict = {}
+    source_counts: dict = {}
+    conflicts: list[str] = []
+
+    # If subagent evidence exists, convert to SupportEvidence
+    if existing_subagent_evidence:
+        for se_dict in existing_subagent_evidence:
+            se = SubagentEvidence(**se_dict) if isinstance(se_dict, dict) else se_dict
+            support_ev = SupportEvidence(
+                agent=se.parent_agent,
+                role=f"subagent:{se.data_channel}",
+                summary=f"[{se.data_channel.upper()}] {se.summary[:400]}",
+                sources=se.sources,
+                confidence=se.confidence,
+                flags=se.flags,
+                links=se.links,
+            )
+            all_support_evidence.append(support_ev)
+            source_counts[se.data_channel] = source_counts.get(se.data_channel, 0) + len(se.sources)
+            conflicts.extend(se.flags)
+    else:
+        # Legacy path: merge from agent_outputs
+        for ao in agent_outputs:
+            if ao.agent == primary_agent:
+                continue
+
+            output_text = ao.contribution if hasattr(ao, "contribution") else str(ao)
+            confidence = ao.confidence if hasattr(ao, "confidence") else 0
+
+            rag_contexts = context.get("rag_contexts") or {}
+            mcp_contexts = context.get("mcp_contexts") or {}
+            agent_rag = rag_contexts.get(ao.agent, "")
+            agent_mcp = mcp_contexts.get(ao.agent, "")
+
+            source_refs: list[str] = []
+            links: list[str] = []
+            if agent_rag:
+                import re as _re
+                for m in _re.finditer(r"\[(\d+)\]", agent_rag):
+                    source_refs.append(f"[{m.group(1)}]")
+            if agent_mcp:
+                import re as _re
+                for m in _re.finditer(r"https?://\S+", agent_mcp):
+                    links.append(m.group(0).rstrip(")"))
+
+            flags: list[str] = []
+            if "contradiction" in output_text.lower() or "conflict" in output_text.lower():
+                flags.append("contradiction")
+            if "verify" in output_text.lower() or "unconfirmed" in output_text.lower():
+                flags.append("needs_verification")
+            if confidence < 40:
+                flags.append("low_confidence")
+            conflicts.extend(flags)
+
+            evidence = SupportEvidence(
+                agent=ao.agent,
+                role="support",
+                summary=output_text[:500] if output_text else "No evidence collected",
+                sources=source_refs[:10],
+                confidence=int(confidence),
+                flags=flags,
+                links=links[:8],
+            )
+            all_support_evidence.append(evidence)
+            source_counts[ao.agent] = len(source_refs)
+
+    avg_conf = sum(e.confidence for e in all_support_evidence) / max(len(all_support_evidence), 1)
+    quality = "Strong" if avg_conf >= 70 else "Moderate" if avg_conf >= 40 else "Weak"
+
+    evidence_bundle = EvidenceBundle(
+        support_evidence=all_support_evidence,
+        citation_map=citation_map,
+        data_quality_summary=f"Average subagent confidence: {avg_conf:.0f}%. Data quality: {quality}. {len(existing_subagent_evidence)} subagents ran." if existing_subagent_evidence else f"Average support confidence: {avg_conf:.0f}%. Data quality: {quality}.",
+        conflicts=list(set(conflicts)),
+        source_counts=source_counts,
+    )
+
+    logger.info(
+        f"Evidence merge complete: {len(all_support_evidence)} evidence items, "
+        f"avg_conf={avg_conf:.0f}, quality={quality}"
+    )
+    return {
+        "evidence_bundle": evidence_bundle.model_dump(),
+        "support_evidence": [e.model_dump() for e in all_support_evidence],
+        "subagent_evidence": existing_subagent_evidence,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Lite Mode: Primary Synthesis node
+# ---------------------------------------------------------------------------
+@node_error_handler(
+    fallback={
+        "recommendation": "Primary synthesis failed",
+        "confidence": 0.0,
+        "risk_score": 50.0,
+    },
+    log_level="error",
+)
+async def primary_synthesis_node(state: CouncilState) -> dict:
+    """Primary agent synthesizes the final answer from merged evidence.
+
+    Uses the primary agent's prompt + the evidence bundle to produce
+    a single final answer with citations and confidence.
+    """
+    from backend.llm.router import llm_router
+    from backend.agents.risk_agent import SYSTEM_PROMPT as RISK_PROMPT
+    from backend.agents.supply_agent import SYSTEM_PROMPT as SUPPLY_PROMPT
+    from backend.agents.logistics_agent import SYSTEM_PROMPT as LOGISTICS_PROMPT
+    from backend.agents.market_agent import SYSTEM_PROMPT as MARKET_PROMPT
+    from backend.agents.finance_agent import SYSTEM_PROMPT as FINANCE_PROMPT
+    from backend.agents.brand_agent import SYSTEM_PROMPT as BRAND_PROMPT
+
+    AGENT_PROMPTS_MAP = {
+        "risk": RISK_PROMPT, "supply": SUPPLY_PROMPT, "logistics": LOGISTICS_PROMPT,
+        "market": MARKET_PROMPT, "finance": FINANCE_PROMPT, "brand": BRAND_PROMPT,
+    }
+
+    query = state.get("query", "")
+    context = state.get("context") or {}
+    primary_agent = state.get("primary_agent") or context.get("primary_agent", "risk")
+    evidence_bundle = state.get("evidence_bundle")
+
+    system_prompt = AGENT_PROMPTS_MAP.get(primary_agent, RISK_PROMPT)
+    system_content = (
+        system_prompt
+        + "\n\nLITE MODE PRIMARY TASK:\n"
+        + "You are the single final decision-maker. Use all support evidence, merge contradictions, "
+        + "and deliver the best final answer. Do not debate other agents. "
+        + "Synthesize the evidence into one clean recommendation.\n"
+    )
+
+    messages = [{"role": "system", "content": system_content}]
+
+    # Inject MCP tool descriptions
+    try:
+        from backend.mcp.agent_mcp_integration import inject_mcp_system_prompt
+        messages = inject_mcp_system_prompt(messages, primary_agent)
+    except Exception:
+        pass
+
+    # Inject RAG context for primary agent
+    rag_contexts = context.get("rag_contexts") or {}
+    primary_rag = rag_contexts.get(primary_agent, "")
+    if primary_rag:
+        messages.append({"role": "system", "content": primary_rag})
+
+    # Inject evidence bundle
+    if evidence_bundle:
+        support_summary = "\n".join(
+            f"**{e['agent']}** (confidence {e['confidence']}%): {e['summary'][:300]}"
+            for e in evidence_bundle.get("support_evidence", [])
+        )
+        data_quality = evidence_bundle.get("data_quality_summary", "Unknown")
+        conflicts = evidence_bundle.get("conflicts", [])
+        messages.append({
+            "role": "system",
+            "content": (
+                f"## Merged Evidence Bundle\n"
+                f"Data Quality: {data_quality}\n"
+                f"Conflicts: {', '.join(conflicts) if conflicts else 'None'}\n\n"
+                f"### Support Agent Evidence:\n{support_summary}"
+            ),
+        })
+
+    # Inject subagent evidence if available
+    subagent_evidence = state.get("subagent_evidence", [])
+    if subagent_evidence:
+        from backend.state import SubagentEvidence
+        subagent_summary = "\n\n".join(
+            f"**{se.get('data_channel', '').upper()}** (confidence {se.get('confidence', 0)}%): {se.get('summary', '')[:300]}"
+            for se in subagent_evidence
+        )
+        messages.append({
+            "role": "system",
+            "content": f"## Subagent Evidence (5 hybrid researchers):\n{subagent_summary}",
+        })
+
+    messages.append({
+        "role": "user",
+        "content": (
+            f"Primary agent: {primary_agent}\n"
+            f"Original query: {query}\n\n"
+            "Now synthesize the final answer using the evidence above. "
+            "State the conclusion clearly, include citations inline, and provide a confidence score."
+        ),
+    })
+
+    try:
+        response, model_used = await llm_router.invoke_with_fallback(primary_agent, messages)
+        recommendation = response.content
+    except Exception as e:
+        logger.error(f"Primary synthesis LLM call failed: {e}")
+        recommendation = f"Primary synthesis failed: {e}"
+
+    # Parse confidence and risk
+    import re as _re
+    confidence = 50.0
+    for p in [r"confidence[:\s]+(\d+(?:\.\d+)?)", r"(\d+(?:\.\d+)?)\s*/\s*100", r"(\d+(?:\.\d+)?)\s*%\s*confidence"]:
+        m = _re.search(p, recommendation, _re.IGNORECASE)
+        if m:
+            v = float(m.group(1))
+            confidence = min(v, 100.0) if v > 1 else v * 100
+            break
+
+    risk_score = 50.0
+    for p in [r"risk\s+score[:\s]+(\d+(?:\.\d+)?)", r"risk[:\s]+(\d+(?:\.\d+)?)"]:
+        m = _re.search(p, recommendation, _re.IGNORECASE)
+        if m:
+            v = float(m.group(1))
+            risk_score = min(v, 100.0) if v > 1 else v * 100
+            break
+
+    logger.info(f"Primary synthesis complete: confidence={confidence:.0f}, risk={risk_score:.0f}")
+    return {
+        "recommendation": recommendation,
+        "confidence": confidence / 100.0,
+        "risk_score": risk_score,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Lite Mode: Conditional edge — which agents should run in lite mode
+# ---------------------------------------------------------------------------
+def _lite_agent_fanout(state: CouncilState) -> dict[str, str]:
+    """Fan-out for lite mode: primary agent + 5 support agents."""
+    ctx = state.get("context") or {}
+    primary_agent = state.get("primary_agent") or ctx.get("primary_agent", "risk")
+    active_agents = ctx.get("active_agents") or AGENT_KEYS
+    targets = {}
+    for name in active_agents:
+        if name in AGENT_KEYS:
+            targets[name] = name
+    if not targets:
+        targets["risk"] = "risk"
+    return targets
+
+
+# ---------------------------------------------------------------------------
+# Build the lite-mode council graph
+# ---------------------------------------------------------------------------
+def build_lite_council_graph() -> StateGraph:
+    """Build a streamlined graph for lite mode.
+
+    Flow: moderator → dynamic_routing → rag_prefetch → mcp_escalation
+          → agent fan-out → evidence_merge → primary_synthesis → END
+
+    Skips: debate, fallback, brand_enhancement, moderator_synthesize
+    """
+    graph = StateGraph(CouncilState)
+
+    # Add nodes
+    graph.add_node("moderator", moderator_parse)
+    graph.add_node("dynamic_routing", dynamic_routing_node)
+    graph.add_node("rag_prefetch", rag_prefetch)
+    graph.add_node("mcp_escalation", mcp_escalation)
+    graph.add_node("risk", risk_agent)
+    graph.add_node("supply", supply_agent)
+    graph.add_node("logistics", logistics_agent)
+    graph.add_node("market", market_agent)
+    graph.add_node("finance", finance_agent)
+    graph.add_node("brand", brand_agent)
+    graph.add_node("evidence_merge", evidence_merge_node)
+    graph.add_node("primary_synthesis", primary_synthesis_node)
+
+    graph.set_entry_point("moderator")
+
+    # Phase 1: Moderator → Dynamic Routing → RAG → MCP → Agent fan-out
+    graph.add_edge("moderator", "dynamic_routing")
+    graph.add_edge("dynamic_routing", "rag_prefetch")
+    graph.add_edge("rag_prefetch", "mcp_escalation")
+
+    # Single conditional edge for all agents
+    graph.add_conditional_edges("mcp_escalation", _lite_agent_fanout, [
+        "risk", "supply", "logistics", "market", "finance", "brand"
+    ])
+
+    # Phase 2: All agents converge to evidence merge
+    for agent in ["risk", "supply", "logistics", "market", "finance", "brand"]:
+        graph.add_edge(agent, "evidence_merge")
+
+    # Phase 3: Evidence merge → Primary synthesis → END
+    graph.add_edge("evidence_merge", "primary_synthesis")
+    graph.add_edge("primary_synthesis", END)
+
+    return graph
+
+
+# ---------------------------------------------------------------------------
 # Day 6: Human-in-the-loop interrupt node
 # ---------------------------------------------------------------------------
 async def human_review_node(state: CouncilState) -> dict:
@@ -357,9 +667,19 @@ async def run_council_streaming(
         "tiered_fallbacks": [],
         "brand_sentiment": None,
         "human_approved": None,
+        # Lite Mode fields
+        "lite_mode": (context or {}).get("lite_mode", False),
+        "primary_agent": (context or {}).get("primary_agent"),
+        "support_evidence": [],
+        "evidence_bundle": None,
+        "subagent_evidence": [],
     }
 
-    graph = build_council_graph()
+    is_lite = initial_state["lite_mode"]
+    if is_lite:
+        graph = build_lite_council_graph()
+    else:
+        graph = build_council_graph()
 
     # Use interrupt_before if human-in-loop is enabled
     compile_kwargs = {}
@@ -417,6 +737,41 @@ async def run_council_streaming(
                     except Exception:
                         pass
 
+            elif node_name == "evidence_merge":
+                payload = {
+                    "type": "evidence_bundle",
+                    "data": {
+                        "session_id": session_id,
+                        "evidence_bundle": output.get("evidence_bundle"),
+                        "support_evidence": output.get("support_evidence", []),
+                    },
+                }
+                yield payload
+                if ws_callback:
+                    try:
+                        await ws_callback(payload)
+                    except Exception:
+                        pass
+
+            elif node_name == "primary_synthesis":
+                payload = {
+                    "type": "complete",
+                    "data": {
+                        "session_id": session_id,
+                        "recommendation": output.get("recommendation", ""),
+                        "confidence": output.get("confidence", 0),
+                        "risk_score": output.get("risk_score", 0),
+                        "lite_mode": True,
+                        "primary_agent": initial_state.get("primary_agent"),
+                    },
+                }
+                yield payload
+                if ws_callback:
+                    try:
+                        await ws_callback(payload)
+                    except Exception:
+                        pass
+
             elif node_name == "synthesize":
                 payload = {
                     "type": "complete",
@@ -449,6 +804,9 @@ async def run_council_streaming(
                 for o in final_state.get("agent_outputs", [])
             ],
             "timestamp": time.time(),
+            "lite_mode": final_state.get("lite_mode", False),
+            "primary_agent": final_state.get("primary_agent"),
+            "evidence_bundle": final_state.get("evidence_bundle"),
         }
         await cache_set(f"council_session:{session_id}", session_data, ttl=settings.session_store_ttl)
     except Exception as e:
