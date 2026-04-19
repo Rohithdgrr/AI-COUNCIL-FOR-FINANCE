@@ -21,23 +21,9 @@ from backend.agents.subagent_registry import (
     SUBAGENT_CHANNELS,
 )
 from backend.state import SubagentEvidence
+from backend.utils.parsing import parse_confidence
 
 logger = logging.getLogger(__name__)
-
-
-def _parse_confidence(text: str, default: int = 50) -> int:
-    """Extract confidence score from LLM output text."""
-    for pattern in [
-        r"confidence\s*score\s*[:\s]*(\d{1,3})",
-        r"confidence\s*[:\s]*(\d{1,3})",
-        r"(\d{1,3})\s*/\s*100",
-        r"(\d{1,3})\s*%\s*confidence",
-    ]:
-        m = re.search(pattern, text, re.IGNORECASE)
-        if m:
-            v = int(m.group(1))
-            return min(v, 100)
-    return default
 
 
 def _detect_flags(text: str, confidence: int) -> list[str]:
@@ -132,7 +118,7 @@ async def run_subagent(
             response_text = f"Evidence gathering failed: {e2}"
 
     # Parse results
-    confidence = _parse_confidence(response_text)
+    confidence = int(parse_confidence(response_text))
     flags = _detect_flags(response_text, confidence)
     source_refs = _extract_source_refs(citation_context)[:10]
     links = _extract_links(citation_context)[:8]

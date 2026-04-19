@@ -8,7 +8,8 @@ export function useSuppliers() {
       const { data } = await riskApi.suppliers()
       return data
     },
-    staleTime: 60000,
+    refetchInterval: 30000, // Refresh every 30s
+    staleTime: 15000,
   })
 }
 
@@ -19,7 +20,8 @@ export function useRiskHeatmap() {
       const { data } = await riskApi.heatmap()
       return data
     },
-    staleTime: 120000,
+    refetchInterval: 60000, // Refresh every 60s
+    staleTime: 30000,
   })
 }
 
@@ -42,7 +44,8 @@ export function useRAGStats() {
       const { data } = await ragApi.stats()
       return data
     },
-    staleTime: 120000,
+    refetchInterval: 60000, // Refresh every 60s
+    staleTime: 30000,
   })
 }
 
@@ -53,8 +56,8 @@ export function useIngestStatus() {
       const { data } = await ingestApi.status()
       return data
     },
-    refetchInterval: 60000,
-    staleTime: 30000,
+    refetchInterval: 30000, // Refresh every 30s
+    staleTime: 15000,
   })
 }
 
@@ -65,6 +68,7 @@ export function useModelsStatus() {
       const { data } = await modelsApi.list()
       return data
     },
-    staleTime: 120000,
+    refetchInterval: 120000, // Refresh every 2 min
+    staleTime: 60000,
   })
 }

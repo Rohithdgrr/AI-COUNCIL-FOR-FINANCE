@@ -150,3 +150,5 @@ class CouncilState(TypedDict):
     support_evidence: Annotated[List[dict], _list_reducer]  # SupportEvidence dicts
     evidence_bundle: Optional[dict]  # EvidenceBundle dict
     subagent_evidence: Annotated[List[dict], _list_reducer]  # SubagentEvidence dicts
+    # Astra ⭐ Integration
+    astra_results: Optional[dict]  # Astra simulation results (brand + market)

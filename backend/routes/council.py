@@ -79,6 +79,7 @@ class CouncilResponse(BaseModel):
     round_number: int = 0
     status: str = "pending"
     latency_ms: int = 0
+    astra_results: Optional[dict] = None  # ⭐ Astra simulation results
 
 
 # ---------------------------------------------------------------------------
@@ -158,6 +159,7 @@ async def council_query(request: CouncilQueryRequest):
             "tiered_fallbacks": [],
             "brand_sentiment": None,
             "human_approved": None,
+            "astra_results": None,  # ⭐ Astra integration
         }
 
         result = await compiled.ainvoke(initial_state)
@@ -190,6 +192,7 @@ async def council_query(request: CouncilQueryRequest):
                 ],
                 "tiered_fallbacks": result.get("tiered_fallbacks", []),
                 "predictions": result.get("predictions", []),
+                "astra_results": result.get("astra_results"),  # ⭐ Include Astra results
                 "timestamp": time.time(),
             }
             await cache_set(f"council_session:{session_id}", session_data, ttl=_s.session_store_ttl)
@@ -232,6 +235,7 @@ async def council_query(request: CouncilQueryRequest):
                 "predictions": result.get("predictions", []),
                 "tiered_fallbacks": result.get("tiered_fallbacks", []),
                 "brand_sentiment": result.get("brand_sentiment"),
+                "astra_results": result.get("astra_results"),  # ⭐ Include Astra results
                 "round_number": result.get("round_number", 0),
                 "latency_ms": latency_ms,
                 "trace_url": trace_url,

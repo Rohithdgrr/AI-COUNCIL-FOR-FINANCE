@@ -3,6 +3,18 @@ from backend.config import settings
 import logging
 import httpx
 import asyncio
+import time
+
+# Import enhanced features
+from backend.mcp.tools.firecrawl_enhanced import (
+    enhanced_scrape,
+    scrape_parallel_formats,
+    content_extractor,
+    get_enhanced_stats,
+    deduplication_layer,
+    rate_limiter,
+    metrics_tracker,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -160,15 +172,33 @@ async def _fc_extract(url: str, schema: dict = None) -> dict:
 async def _web_scrape(params: dict):
     url = params.get("url", "")
     formats = params.get("formats", ["markdown"])
+    use_enhanced = params.get("use_enhanced", True)  # Enable enhancements by default
 
     if not _is_configured():
         return _mock_scrape(url, error="Firecrawl not configured (set FIRECRAWL_BASE_URL or FIRECRAWL_API_KEY)")
 
     try:
-        result = await _fc_scrape(url, formats)
+        # Use enhanced scrape with deduplication and rate limiting
+        if use_enhanced:
+            result = await enhanced_scrape(
+                url,
+                formats,
+                _fc_scrape,
+                use_dedup=True,
+                use_rate_limit=True,
+            )
+        else:
+            result = await _fc_scrape(url, formats)
+        
         data = result.get("data", result)
         content = data.get("markdown", data.get("html", data.get("content", "")))
         metadata = data.get("metadata", {})
+        
+        # Add enhancement metadata
+        if use_enhanced:
+            metadata["enhanced"] = True
+            metadata["dedup_stats"] = deduplication_layer.get_stats()
+        
         return {"content": content, "metadata": metadata, "url": url, "mock": False}
     except httpx.ConnectError as e:
         logger.error(f"Firecrawl unreachable: {e}")
@@ -263,26 +293,50 @@ async def _web_scrape_supplier(params: dict):
     """Scrape a supplier website for capability and certification data."""
     url = params.get("url", "")
     extract_fields = params.get("extract_fields", ["company_name", "certifications", "capabilities", "products", "contact"])
+    use_smart_extraction = params.get("use_smart_extraction", True)
 
     if not _is_configured():
         return _mock_supplier(url, error="Firecrawl not configured")
 
     try:
-        # Build a simple schema for supplier data extraction
-        schema = {
-            "type": "object",
-            "properties": {field: {"type": "string"} for field in extract_fields},
-        }
-        try:
-            result = await _fc_extract(url, schema)
-            data = result.get("data", result)
-        except Exception as ex:
-            logger.warning(f"Firecrawl extract for supplier failed (needs OpenAI key): {ex}")
-            data = {}
-        # Also get full markdown content
-        scrape_result = await _fc_scrape(url, ["markdown"])
-        content = scrape_result.get("data", {}).get("markdown", "")
-        return {"extracted": data, "content": content, "url": url, "mock": False}
+        # Use smart content extraction pipeline
+        if use_smart_extraction:
+            schema = {
+                "type": "object",
+                "properties": {field: {"type": "string"} for field in extract_fields},
+            }
+            
+            result = await content_extractor.extract(
+                url,
+                schema=schema,
+                scrape_fn=_fc_scrape,
+                extract_fn=_fc_extract,
+            )
+            
+            return {
+                "extracted": result.get("data", {}),
+                "extraction_method": result.get("method", "unknown"),
+                "confidence": result.get("confidence", 0.0),
+                "url": url,
+                "mock": False,
+            }
+        else:
+            # Original implementation
+            schema = {
+                "type": "object",
+                "properties": {field: {"type": "string"} for field in extract_fields},
+            }
+            try:
+                result = await _fc_extract(url, schema)
+                data = result.get("data", result)
+            except Exception as ex:
+                logger.warning(f"Firecrawl extract for supplier failed (needs OpenAI key): {ex}")
+                data = {}
+            
+            # Also get full markdown content
+            scrape_result = await _fc_scrape(url, ["markdown"])
+            content = scrape_result.get("data", {}).get("markdown", "")
+            return {"extracted": data, "content": content, "url": url, "mock": False}
     except httpx.ConnectError:
         return _mock_supplier(url, error="Firecrawl server unreachable — start with: cd firecrawl && docker compose up -d")
     except httpx.TimeoutException:
@@ -290,6 +344,31 @@ async def _web_scrape_supplier(params: dict):
     except Exception as e:
         logger.error(f"Firecrawl supplier scrape failed: {e}")
         return _mock_supplier(url, error=str(e))
+
+
+async def _firecrawl_stats(params: dict):
+    """Get Firecrawl enhancement statistics and health metrics."""
+    try:
+        stats = get_enhanced_stats()
+        
+        # Add health status
+        metrics = stats.get("metrics", {})
+        success_rate = metrics.get("success_rate", 0)
+        avg_response_time = metrics.get("avg_response_time", 0)
+        
+        health_status = "healthy"
+        if success_rate < 0.8 or avg_response_time > 10:
+            health_status = "degraded"
+        if success_rate < 0.5 or avg_response_time > 20:
+            health_status = "unhealthy"
+        
+        stats["health_status"] = health_status
+        stats["configured"] = _is_configured()
+        
+        return stats
+    except Exception as e:
+        logger.error(f"Failed to get Firecrawl stats: {e}")
+        return {"error": str(e)}
 
 
 async def _web_scrape_news(params: dict):
@@ -351,12 +430,13 @@ def _mock_news(url: str, error: str = "") -> dict:
 TOOLS = [
     {
         "name": "web_scrape",
-        "description": "Scrape a single URL and return clean markdown content using Firecrawl (self-hosted or cloud)",
+        "description": "Scrape a single URL and return clean markdown content using Firecrawl (self-hosted or cloud). Enhanced with request deduplication and adaptive rate limiting.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "url": {"type": "string", "description": "URL to scrape"},
                 "formats": {"type": "array", "items": {"type": "string"}, "description": "Output formats (markdown, html, rawHtml)", "default": ["markdown"]},
+                "use_enhanced": {"type": "boolean", "description": "Enable deduplication and rate limiting", "default": True},
             },
             "required": ["url"],
         },
@@ -412,12 +492,13 @@ TOOLS = [
     },
     {
         "name": "web_scrape_supplier",
-        "description": "Scrape a supplier website and extract structured capability data — certifications, products, contact info, capabilities",
+        "description": "Scrape a supplier website and extract structured capability data — certifications, products, contact info, capabilities. Enhanced with smart multi-stage extraction pipeline.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "url": {"type": "string", "description": "Supplier website URL"},
                 "extract_fields": {"type": "array", "items": {"type": "string"}, "description": "Fields to extract", "default": ["company_name", "certifications", "capabilities", "products", "contact"]},
+                "use_smart_extraction": {"type": "boolean", "description": "Use smart multi-stage extraction", "default": True},
             },
             "required": ["url"],
         },
@@ -438,6 +519,17 @@ TOOLS = [
         "handler": _web_scrape_news,
         "category": "firecrawl",
         "cache_ttl": 1800,
+    },
+    {
+        "name": "firecrawl_stats",
+        "description": "Get Firecrawl enhancement statistics including deduplication, rate limiting, and performance metrics",
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+        },
+        "handler": _firecrawl_stats,
+        "category": "firecrawl",
+        "cache_ttl": 60,
     },
 ]
 

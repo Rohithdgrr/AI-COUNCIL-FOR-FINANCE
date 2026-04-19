@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
   Crown, RotateCcw, Users, 
-  Zap, BarChart3, MessageSquare, ArrowRight, StopCircle, Fish
+  Zap, BarChart3, MessageSquare, ArrowRight, StopCircle, Star
 } from "lucide-react"
 import { useCouncilV2Store } from '@/store/councilV2Store'
 import { useCouncilV2Stream } from '@/hooks/useCouncilV2Stream'
@@ -58,26 +58,34 @@ export default function Debate() {
   const [queryInput, setQueryInput] = useState('')
   const [selectedAgents, setSelectedAgents] = useState<string[]>([])
   const [activeRound, setActiveRound] = useState(currentRound || 1)
-  const completedRounds: number[] = []
-  if (moderatorR1) completedRounds.push(1)
-  if (moderatorR2) completedRounds.push(2)
-  if (supervisorResult) completedRounds.push(3)
+  
+  // Memoize completed rounds to avoid recreation on every render
+  const completedRounds = useMemo(() => {
+    const rounds: number[] = []
+    if (moderatorR1) rounds.push(1)
+    if (moderatorR2) rounds.push(2)
+    if (supervisorResult) rounds.push(3)
+    return rounds
+  }, [moderatorR1, moderatorR2, supervisorResult])
 
-  // Build agentConfidence map from store agents
+  // Build agentConfidence map from store agents with null safety
   const agentConfidence: Record<string, number> = {}
   const agentOutputs: Record<string, string> = {}
   for (const [key, state] of Object.entries(agents)) {
     const roundKey = activeRound <= 1 ? 'round1' : 'round2'
-    agentConfidence[key] = state[roundKey].confidence
-    agentOutputs[key] = state[roundKey].output
+    // Add null safety check
+    if (state && state[roundKey]) {
+      agentConfidence[key] = state[roundKey].confidence ?? 0
+      agentOutputs[key] = state[roundKey].output ?? ''
+    }
   }
 
   const handleQuerySubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!queryInput.trim() || isStreaming) return
-    const currentSettings = useSettingsStore.getState().settings
-    const isLite = currentSettings.lite_mode
-    const primaryAgent = isLite ? currentSettings.lite_primary_agent : undefined
+    // Use reactive settings from store hook instead of getState()
+    const isLite = settings.lite_mode
+    const primaryAgent = isLite ? settings.lite_primary_agent : undefined
     const supportAgents = isLite && primaryAgent
       ? COUNCIL_AGENTS.map((a) => a.key).filter((k) => k !== primaryAgent).slice(0, 5)
       : undefined
@@ -131,7 +139,7 @@ export default function Debate() {
                    onClick={() => setActiveRound(round.number)}
                  />
                ))}
-               {/* MiroFish Swarm Toggle */}
+               {/* Astra ⭐ Swarm Toggle */}
                <button
                  onClick={() => updateSettings({ mirofish_enabled: !settings.mirofish_enabled })}
                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wider transition-all duration-200 ${
@@ -139,10 +147,10 @@ export default function Debate() {
                      ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-lg shadow-cyan-500/20'
                      : 'bg-white/[0.06] text-white/40 hover:bg-white/[0.1] hover:text-white/60 border border-white/[0.08]'
                  }`}
-                 title="Toggle MiroFish Swarm simulation for Brand & Market agents after 3 rounds"
+                 title="Toggle Astra ⭐ Swarm simulation for Brand & Market agents after 3 rounds"
                >
-                 <Fish className="w-3.5 h-3.5" />
-                 <span>MiroFish</span>
+                 <Star className="w-3.5 h-3.5" />
+                 <span>Astra ⭐</span>
                  {store.mirofishPhase !== 'idle' && (
                    <span className={`w-1.5 h-1.5 rounded-full ${store.mirofishPhase === 'completed' ? 'bg-emerald-400' : 'bg-cyan-400 animate-pulse'}`} />
                  )}
@@ -241,13 +249,13 @@ export default function Debate() {
           </div>
         )}
 
-        {/* MIROFISH SWARM PHASE INDICATOR */}
+        {/* ASTRA ⭐ SWARM PHASE INDICATOR */}
         {store.mirofishPhase !== 'idle' && (
           <div className="px-8 py-3 bg-gradient-to-r from-cyan-900/20 to-blue-900/20 border-b border-cyan-500/10">
             <div className="flex items-center gap-3">
-              <Fish className="w-4 h-4 text-cyan-400" />
+              <Star className="w-4 h-4 text-cyan-400" />
               <span className="text-[11px] font-bold uppercase tracking-wider text-cyan-300">
-                MiroFish Swarm
+                Astra ⭐ Swarm
               </span>
               <div className="flex items-center gap-2">
                 {['graph_building', 'persona_generation', 'simulation_running', 'report_generation'].map((phase) => {

@@ -1,24 +1,9 @@
 from backend.state import CouncilState, AgentOutput
 from backend.llm.router import llm_router
-import re
+from backend.utils.parsing import parse_confidence
 import logging
 
 logger = logging.getLogger(__name__)
-
-
-def _parse_confidence(text: str, default: float = 50.0) -> float:
-    """Extract confidence score from LLM response text."""
-    patterns = [
-        r"confidence[:\s]+(\d+(?:\.\d+)?)",
-        r"confidence\s+score[:\s]+(\d+(?:\.\d+)?)",
-        r"(\d+(?:\.\d+)?)\s*%\s*confidence",
-    ]
-    for pattern in patterns:
-        match = re.search(pattern, text, re.IGNORECASE)
-        if match:
-            val = float(match.group(1))
-            return min(val, 100.0) if val > 1 else val * 100
-    return default
 
 SYSTEM_PROMPT = """You are the **Supply Optimizer Agent** — "I find you the best supplier, always."
 
@@ -159,7 +144,7 @@ async def supply_agent(state: CouncilState) -> dict:
 
     try:
         response, model_used = await llm_router.invoke_with_fallback("supply", messages)
-        confidence = _parse_confidence(response.content)
+        confidence = parse_confidence(response.content)
         return {
             "agent_outputs": [
                 AgentOutput(

@@ -16,7 +16,7 @@ Flow:
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, AsyncGenerator
 from backend.llm.router import llm_router
 from backend.middleware.security import sanitize_input
 import uuid
@@ -686,7 +686,12 @@ async def council_v2_stream(request: CouncilV2Request):
             except Exception as e:
                 logger.warning(f"Lite session storage to Redis failed: {e}")
 
-            yield f"data: {json.dumps({'type': 'complete', 'session_id': session_id, 'confidence': final_confidence, 'recommendation': final_output, 'primary_agent': primary_agent, 'lite_mode': True, 'evidence_bundle': evidence_bundle.model_dump()})}\n\n"
+            # ── MIROFISH SWARM PHASE (brand + market, works in lite mode too) ──
+            if mirofish_enabled:
+                async for ev in _run_mirofish_swarm(query):
+                    yield ev
+
+            yield f"data: {json.dumps({'type': 'complete', 'session_id': session_id, 'confidence': final_confidence, 'recommendation': final_output, 'primary_agent': primary_agent, 'lite_mode': True, 'mirofish_enabled': mirofish_enabled, 'evidence_bundle': evidence_bundle.model_dump()})}\n\n"
             return
 
         # ── STAGE 1: RAG Fetching ──
@@ -853,106 +858,10 @@ async def council_v2_stream(request: CouncilV2Request):
         sup_confidence = _parse_confidence(supervisor_output, mod_r2.get("consensus", 50))
         yield f"data: {json.dumps({'type': 'supervisor_done', 'round': 3, 'confidence': sup_confidence})}\n\n"
 
-        # ── MIROFISH SWARM PHASE (brand + market only, after 3 rounds) ──
+        # ── MIROFISH SWARM PHASE (brand + market, works in both lite and full council) ──
         if mirofish_enabled:
-            yield f"data: {json.dumps({'type': 'mirofish_start', 'agents': ['brand', 'market']})}\n\n"
-
-            async def _run_mirofish_agent(agent_type: str, agent_output_text: str):
-                """Run MiroFish simulation for a single agent, yielding SSE progress events."""
-                from backend.mirofish.simulation_engine import SimulationEngine
-                from backend.mirofish.graph_builder import GraphBuilder
-                from backend.mirofish.persona_generator import PersonaGenerator
-                from backend.mirofish.schemas import SimulationConfig, SimulationState
-
-                sim_id = f"{agent_type}_sim_{uuid.uuid4().hex[:8]}"
-
-                try:
-                    # Phase 1: Graph building
-                    yield f"data: {json.dumps({'type': 'mirofish_agent_progress', 'agent': agent_type, 'phase': 'graph_building', 'simulation_id': sim_id})}\n\n"
-                    graph_builder = GraphBuilder()
-                    entities, relationships = await graph_builder.build_graph(query)
-                    entity_names = [e.name for e in entities]
-
-                    yield f"data: {json.dumps({'type': 'mirofish_agent_progress', 'agent': agent_type, 'phase': 'graph_ready', 'simulation_id': sim_id, 'entities': entity_names, 'entity_count': len(entities)})}\n\n"
-
-                    # Phase 2: Persona generation
-                    yield f"data: {json.dumps({'type': 'mirofish_agent_progress', 'agent': agent_type, 'phase': 'persona_generation', 'simulation_id': sim_id})}\n\n"
-                    config = SimulationConfig(
-                        name=sim_id,
-                        seed_query=query,
-                        horizon_days=30,
-                        num_personas=5,
-                        rounds=3,
-                    )
-                    persona_gen = PersonaGenerator()
-                    personas = await persona_gen.generate_personas(entities, relationships, config)
-                    persona_names = [f"{p.name} ({p.role.value})" for p in personas]
-
-                    yield f"data: {json.dumps({'type': 'mirofish_agent_progress', 'agent': agent_type, 'phase': 'personas_ready', 'simulation_id': sim_id, 'personas': persona_names, 'persona_count': len(personas)})}\n\n"
-
-                    # Phase 3: Run simulation
-                    yield f"data: {json.dumps({'type': 'mirofish_agent_progress', 'agent': agent_type, 'phase': 'simulation_running', 'simulation_id': sim_id})}\n\n"
-                    state = SimulationState(
-                        id=sim_id,
-                        config=config,
-                        entities=entities,
-                        relationships=relationships,
-                        personas=personas,
-                        agent_type=agent_type,
-                        parent_query=query,
-                    )
-                    engine = SimulationEngine()
-                    state = await engine.run_simulation(state)
-
-                    # Phase 4: Report
-                    yield f"data: {json.dumps({'type': 'mirofish_agent_progress', 'agent': agent_type, 'phase': 'report_generation', 'simulation_id': sim_id})}\n\n"
-                    from backend.mirofish.report_agent import ReportAgent
-                    report_agent = ReportAgent()
-                    report = await report_agent.generate_report(state, report_type="full")
-
-                    result = {
-                        "simulation_id": sim_id,
-                        "status": state.status,
-                        "prediction": state.result.prediction if state.result else "Simulation failed",
-                        "confidence": state.result.confidence if state.result else 0.0,
-                        "key_factors": state.result.key_factors if state.result else [],
-                        "risks": state.result.risks if state.result else [],
-                        "opportunities": state.result.opportunities if state.result else [],
-                        "recommendations": state.result.recommendations if state.result else [],
-                        "scenarios": state.result.scenarios if state.result else [],
-                        "entities": entity_names,
-                        "personas": persona_names,
-                        "report_summary": report.get("prediction", "")[:200] if report else "",
-                    }
-
-                    yield f"data: {json.dumps({'type': 'mirofish_agent_complete', 'agent': agent_type, 'result': result})}\n\n"
-                    return
-
-                except Exception as e:
-                    logger.error(f"MiroFish simulation for {agent_type} failed: {e}")
-                    yield f"data: {json.dumps({'type': 'mirofish_agent_error', 'agent': agent_type, 'error': str(e)})}\n\n"
-                    return
-
-            # Run brand and market simulations in parallel, collecting SSE events
-            brand_events = []
-            market_events = []
-
-            async def _brand_sim():
-                async for ev in _run_mirofish_agent("brand", r2_outputs.get("brand", "")):
-                    brand_events.append(ev)
-
-            async def _market_sim():
-                async for ev in _run_mirofish_agent("market", r2_outputs.get("market", "")):
-                    market_events.append(ev)
-
-            # Run both in parallel
-            await asyncio.gather(_brand_sim(), _market_sim())
-
-            # Yield all collected events (interleaved for streaming feel)
-            for ev in brand_events + market_events:
+            async for ev in _run_mirofish_swarm(query):
                 yield ev
-
-            yield f"data: {json.dumps({'type': 'mirofish_complete'})}\n\n"
 
         yield f"data: {json.dumps({'type': 'complete', 'session_id': session_id, 'confidence': sup_confidence, 'recommendation': supervisor_output, 'mirofish_enabled': mirofish_enabled})}\n\n"
 
@@ -961,6 +870,111 @@ async def council_v2_stream(request: CouncilV2Request):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
     )
+
+
+async def _run_mirofish_swarm(query: str) -> AsyncGenerator[str, None]:
+    """Run MiroFish swarm simulation for brand + market agents.
+    Works in both lite mode and full council mode.
+    Yields SSE-formatted events for streaming to the frontend.
+    """
+    yield f"data: {json.dumps({'type': 'mirofish_start', 'agents': ['brand', 'market']})}\n\n"
+
+    async def _run_mirofish_agent(agent_type: str):
+        """Run MiroFish simulation for a single agent, yielding SSE progress events."""
+        from backend.mirofish.simulation_engine import SimulationEngine
+        from backend.mirofish.graph_builder import GraphBuilder
+        from backend.mirofish.persona_generator import PersonaGenerator
+        from backend.mirofish.schemas import SimulationConfig, SimulationState
+
+        sim_id = f"{agent_type}_sim_{uuid.uuid4().hex[:8]}"
+
+        try:
+            # Phase 1: Graph building
+            yield f"data: {json.dumps({'type': 'mirofish_agent_progress', 'agent': agent_type, 'phase': 'graph_building', 'simulation_id': sim_id})}\n\n"
+            graph_builder = GraphBuilder()
+            entities, relationships = await graph_builder.build_graph(query)
+            entity_names = [e.name for e in entities]
+
+            yield f"data: {json.dumps({'type': 'mirofish_agent_progress', 'agent': agent_type, 'phase': 'graph_ready', 'simulation_id': sim_id, 'entities': entity_names, 'entity_count': len(entities)})}\n\n"
+
+            # Phase 2: Persona generation
+            yield f"data: {json.dumps({'type': 'mirofish_agent_progress', 'agent': agent_type, 'phase': 'persona_generation', 'simulation_id': sim_id})}\n\n"
+            config = SimulationConfig(
+                name=sim_id,
+                seed_query=query,
+                horizon_days=30,
+                num_personas=5,
+                rounds=3,
+            )
+            persona_gen = PersonaGenerator()
+            personas = await persona_gen.generate_personas(entities, relationships, config)
+            persona_names = [f"{p.name} ({p.role.value})" for p in personas]
+
+            yield f"data: {json.dumps({'type': 'mirofish_agent_progress', 'agent': agent_type, 'phase': 'personas_ready', 'simulation_id': sim_id, 'personas': persona_names, 'persona_count': len(personas)})}\n\n"
+
+            # Phase 3: Run simulation
+            yield f"data: {json.dumps({'type': 'mirofish_agent_progress', 'agent': agent_type, 'phase': 'simulation_running', 'simulation_id': sim_id})}\n\n"
+            state = SimulationState(
+                id=sim_id,
+                config=config,
+                entities=entities,
+                relationships=relationships,
+                personas=personas,
+                agent_type=agent_type,
+                parent_query=query,
+            )
+            engine = SimulationEngine()
+            state = await engine.run_simulation(state)
+
+            # Phase 4: Report
+            yield f"data: {json.dumps({'type': 'mirofish_agent_progress', 'agent': agent_type, 'phase': 'report_generation', 'simulation_id': sim_id})}\n\n"
+            from backend.mirofish.report_agent import ReportAgent
+            report_agent = ReportAgent()
+            report = await report_agent.generate_report(state, report_type="full")
+
+            result = {
+                "simulation_id": sim_id,
+                "status": state.status,
+                "prediction": state.result.prediction if state.result else "Simulation failed",
+                "confidence": state.result.confidence if state.result else 0.0,
+                "key_factors": state.result.key_factors if state.result else [],
+                "risks": state.result.risks if state.result else [],
+                "opportunities": state.result.opportunities if state.result else [],
+                "recommendations": state.result.recommendations if state.result else [],
+                "scenarios": state.result.scenarios if state.result else [],
+                "entities": entity_names,
+                "personas": persona_names,
+                "report_summary": report.get("prediction", "")[:200] if report else "",
+            }
+
+            yield f"data: {json.dumps({'type': 'mirofish_agent_complete', 'agent': agent_type, 'result': result})}\n\n"
+            return
+
+        except Exception as e:
+            logger.error(f"MiroFish simulation for {agent_type} failed: {e}")
+            yield f"data: {json.dumps({'type': 'mirofish_agent_error', 'agent': agent_type, 'error': str(e)})}\n\n"
+            return
+
+    # Run brand and market simulations in parallel, collecting SSE events
+    brand_events: list[str] = []
+    market_events: list[str] = []
+
+    async def _brand_sim():
+        async for ev in _run_mirofish_agent("brand"):
+            brand_events.append(ev)
+
+    async def _market_sim():
+        async for ev in _run_mirofish_agent("market"):
+            market_events.append(ev)
+
+    # Run both in parallel
+    await asyncio.gather(_brand_sim(), _market_sim())
+
+    # Yield all collected events (interleaved for streaming feel)
+    for ev in brand_events + market_events:
+        yield ev
+
+    yield f"data: {json.dumps({'type': 'mirofish_complete'})}\n\n"
 
 
 async def _run_moderator(query: str, outputs: dict, confidences: dict, round_num: int) -> dict:

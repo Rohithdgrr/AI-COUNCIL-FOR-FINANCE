@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 import logging
 import os
 import time
+import asyncio
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -32,7 +33,11 @@ from backend.routes.market import router as market_router
 from backend.routes.observability import router as observability_router
 from backend.routes.council_v2 import router as council_v2_router
 from backend.routes.mcp_manifest import router as mcp_manifest_router
-from backend.routes.simulation import router as simulation_router
+from backend.routes.astra import router as astra_router
+from backend.routes.data_sources import router as data_sources_router
+from backend.routes.quota import router as quota_router
+from backend.routes.webhooks import router as webhooks_router
+from backend.routes.batch import router as batch_router
 from backend.ws.server import websocket_endpoint
 
 # Setup structured JSON logging
@@ -84,6 +89,15 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"MCP client initialization failed: {e}")
 
+    try:
+        from backend.api.webhooks import webhook_manager
+        await webhook_manager.load_subscriptions()
+        # Start webhook delivery worker in background
+        asyncio.create_task(webhook_manager.start_delivery_worker())
+        logger.info("Webhook system initialized")
+    except Exception as e:
+        logger.warning(f"Webhook system initialization failed: {e}")
+
     yield
     logger.info("Shutting down SupplyChainGPT Council API...")
 
@@ -127,10 +141,21 @@ app.include_router(rag_router, prefix="/rag", tags=["RAG"])
 app.include_router(market_router, tags=["Market"])
 app.include_router(observability_router, prefix="/observability", tags=["Observability"])
 app.include_router(mcp_manifest_router, prefix="/mcp", tags=["MCP Manifest"])
-app.include_router(simulation_router, prefix="/simulation", tags=["Simulation"])
+app.include_router(astra_router, prefix="/astra", tags=["Astra ⭐"])
+app.include_router(data_sources_router, tags=["Data Sources"])
+app.include_router(quota_router, tags=["Quota & Usage"])
+app.include_router(webhooks_router, tags=["Webhooks"])
+app.include_router(batch_router, prefix="/api/v1", tags=["Batch Operations"])
 
 # WebSocket
 app.websocket("/ws")(websocket_endpoint)
+
+# GraphQL
+from strawberry.fastapi import GraphQLRouter
+from backend.graphql.schema import schema
+
+graphql_app = GraphQLRouter(schema)
+app.include_router(graphql_app, prefix="/graphql", tags=["GraphQL"])
 
 
 @app.get("/metrics", response_class=PlainTextResponse)

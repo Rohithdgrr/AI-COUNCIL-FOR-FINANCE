@@ -216,18 +216,27 @@ async def _fetch_openweather(query: str) -> list[dict]:
     if not api_key:
         return []
     try:
-        # Extract location keywords from query
+        # Extract location from query or use default major port cities
+        import re
+        location_match = re.search(r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b', query)
+        location = location_match.group(1) if location_match else "Shanghai"
+        
+        # Common supply chain cities
+        supply_chain_cities = ["Shanghai", "Singapore", "Rotterdam", "Los Angeles", "Hong Kong"]
+        if location not in supply_chain_cities and any(city.lower() in query.lower() for city in supply_chain_cities):
+            location = next(city for city in supply_chain_cities if city.lower() in query.lower())
+        
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.get(
                 "https://api.openweathermap.org/data/2.5/weather",
-                params={"q": "Shanghai", "appid": api_key, "units": "metric"},
+                params={"q": location, "appid": api_key, "units": "metric"},
             )
             if resp.status_code == 200:
                 d = resp.json()
                 desc = d.get("weather", [{}])[0].get("description", "")
                 temp = d.get("main", {}).get("temp", "N/A")
                 wind = d.get("wind", {}).get("speed", "N/A")
-                return [{"title": "Shanghai Weather (Key Port)", "url": "https://openweathermap.org", "snippet": f"Current conditions: {desc}, Temp: {temp}°C, Wind: {wind} m/s. Affects Shanghai port operations and regional shipping."}]
+                return [{"title": f"{location} Weather (Supply Chain Hub)", "url": "https://openweathermap.org", "snippet": f"Current conditions: {desc}, Temp: {temp}°C, Wind: {wind} m/s. Affects {location} port operations and regional shipping."}]
     except Exception as e:
         logger.debug(f"OpenWeather failed: {e}")
     return []

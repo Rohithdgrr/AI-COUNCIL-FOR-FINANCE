@@ -41,6 +41,7 @@ interface CouncilV2State {
   activeSubagents: string[]
   streamingSubagents: string[] // Track which subagents are currently receiving streaming updates
   // MiroFish swarm state
+  mirofishEnabled: boolean
   mirofishPhase: 'idle' | 'graph_building' | 'persona_generation' | 'simulation_running' | 'report_generation' | 'completed' | 'failed'
   mirofishBrandResult: (SimulationResult & { simulation_id?: string; status?: string; entities?: string[]; personas?: string[]; report_summary?: string }) | null
   mirofishMarketResult: (SimulationResult & { simulation_id?: string; status?: string; entities?: string[]; personas?: string[]; report_summary?: string }) | null
@@ -123,6 +124,7 @@ export const useCouncilV2Store = create<CouncilV2State>((set) => ({
   activeSubagents: [],
   streamingSubagents: [],
   // MiroFish swarm state
+  mirofishEnabled: false,
   mirofishPhase: 'idle',
   mirofishBrandResult: null,
   mirofishMarketResult: null,
@@ -143,27 +145,37 @@ export const useCouncilV2Store = create<CouncilV2State>((set) => ({
           query: event.query || '',
           currentRound: 0,
           currentPhase: 'idle',
-          liteMode: Boolean((event as any).lite_mode),
-          liteSupportAgents: (event as any).support_agents || [],
+          liteMode: Boolean(event.lite_mode),
+          liteSupportAgents: event.support_agents || [],
           subagentEvidence: {},
           activeSubagents: [],
           streamingSubagents: [],
-          supportAgentPolicy: (event as any).support_agent_policy || { rag: true, api: true, mcp: true, web: true, graph: true },
+          supportAgentPolicy: event.support_agent_policy || { rag: true, api: true, mcp: true, web: true, graph: true },
           agents: makeInitialAgents(),
           moderatorR1: null,
           moderatorR2: null,
           supervisorResult: null,
-          selectedAgent: (event as any).primary_agent || 'risk',
+          selectedAgent: event.primary_agent || 'risk',
           viewMode: 'agent',
           citationMaps: {},
           pipelineStages: makeInitialStages(),
           supportEvidence: {},
           evidenceBundle: null,
+          mirofishEnabled: Boolean(event.mirofish_enabled),
+          mirofishPhase: 'idle',
+          mirofishBrandResult: null,
+          mirofishMarketResult: null,
+          mirofishBrandEntities: [],
+          mirofishMarketEntities: [],
+          mirofishBrandPersonas: [],
+          mirofishMarketPersonas: [],
+          mirofishBrandPhase: '',
+          mirofishMarketPhase: '',
         })
         break
 
       case 'pipeline_stage': {
-        const stageKey = (event as any).stage as PipelineStageKey | undefined
+        const stageKey = event.stage as PipelineStageKey | undefined
         if (stageKey && STAGE_KEYS.includes(stageKey)) {
           set((state) => {
             // Mark previous stages as done, current as active
@@ -173,8 +185,8 @@ export const useCouncilV2Store = create<CouncilV2State>((set) => ({
               if (i < idx) newStages[k] = { ...newStages[k], status: 'done' }
               else if (i === idx) newStages[k] = {
                 status: 'active',
-                detail: (event as any).detail || '',
-                count: (event as any).count || 0,
+                detail: event.detail || '',
+                count: event.count || 0,
               }
             })
             return { pipelineStages: newStages }
@@ -302,8 +314,8 @@ export const useCouncilV2Store = create<CouncilV2State>((set) => ({
       }
 
       case 'citations_map': {
-        const agentKey = (event as any).agent || ''
-        const urls = (event as any).urls || {}
+        const agentKey = event.agent || ''
+        const urls = event.urls || {}
         if (agentKey) {
           set((state) => ({
             citationMaps: {
@@ -316,9 +328,9 @@ export const useCouncilV2Store = create<CouncilV2State>((set) => ({
       }
 
       case 'source_discovered': {
-        const agentKey = (event as any).agent || ''
-        const sources = (event as any).sources || []
-        const count = (event as any).count || 0
+        const agentKey = event.agent || ''
+        const sources = event.sources || []
+        const count = event.count || 0
         // Store discovered sources immediately and show in pipeline
         set((state) => ({
           discoveredSources: {
@@ -338,8 +350,8 @@ export const useCouncilV2Store = create<CouncilV2State>((set) => ({
       }
 
       case 'support_evidence': {
-        const agentKey = (event as any).agent || ''
-        const evidence = (event as any).evidence as SupportEvidence | undefined
+        const agentKey = event.agent || ''
+        const evidence = event.evidence
         if (agentKey && evidence) {
           set((state) => ({
             supportEvidence: {
@@ -352,12 +364,12 @@ export const useCouncilV2Store = create<CouncilV2State>((set) => ({
       }
 
       case 'evidence_bundle': {
-        const bundle = (event as any).bundle as EvidenceBundle | undefined
+        const bundle = event.bundle
         if (bundle) {
           set({ evidenceBundle: bundle })
         }
         // Also store subagent_evidence if present
-        const subagentEv = (event as any).subagent_evidence as SubagentEvidence[] | undefined
+        const subagentEv = event.subagent_evidence
         if (subagentEv) {
           set((state) => {
             const map: Record<string, SubagentEvidence> = { ...state.subagentEvidence }
@@ -371,7 +383,7 @@ export const useCouncilV2Store = create<CouncilV2State>((set) => ({
       }
 
       case 'subagent_start': {
-        const subagentKey = (event as any).subagent_key as string | undefined
+        const subagentKey = event.subagent_key
         if (subagentKey) {
           set((state) => ({
             activeSubagents: [...state.activeSubagents, subagentKey],
@@ -381,8 +393,8 @@ export const useCouncilV2Store = create<CouncilV2State>((set) => ({
       }
 
       case 'subagent_evidence': {
-        const seData = (event as any).evidence as SubagentEvidence | undefined
-        const sKey = (event as any).subagent_key as string | undefined
+        const seData = event.evidence
+        const sKey = event.subagent_key
         if (seData && sKey) {
           set((state) => ({
             subagentEvidence: {
@@ -411,18 +423,18 @@ export const useCouncilV2Store = create<CouncilV2State>((set) => ({
         break
 
       case 'mirofish_agent_progress': {
-        const mfAgent = (event as any).agent as string
-        const mfPhase = (event as any).phase as string
-        const mfEntities = (event as any).entities as string[] | undefined
-        const mfPersonas = (event as any).personas as string[] | undefined
+        const mfAgent = event.agent
+        const mfPhase = event.phase
+        const mfEntities = event.entities
+        const mfPersonas = event.personas
 
         const updates: Partial<CouncilV2State> = {}
         if (mfAgent === 'brand') {
-          updates.mirofishBrandPhase = mfPhase
+          updates.mirofishBrandPhase = mfPhase || ''
           if (mfEntities) updates.mirofishBrandEntities = mfEntities
           if (mfPersonas) updates.mirofishBrandPersonas = mfPersonas
         } else if (mfAgent === 'market') {
-          updates.mirofishMarketPhase = mfPhase
+          updates.mirofishMarketPhase = mfPhase || ''
           if (mfEntities) updates.mirofishMarketEntities = mfEntities
           if (mfPersonas) updates.mirofishMarketPersonas = mfPersonas
         }
@@ -436,7 +448,7 @@ export const useCouncilV2Store = create<CouncilV2State>((set) => ({
           simulation_running: 'simulation_running',
           report_generation: 'report_generation',
         }
-        if (phaseMap[mfPhase]) {
+        if (mfPhase && phaseMap[mfPhase]) {
           updates.mirofishPhase = phaseMap[mfPhase]
         }
 
@@ -445,8 +457,8 @@ export const useCouncilV2Store = create<CouncilV2State>((set) => ({
       }
 
       case 'mirofish_agent_complete': {
-        const mfAgent = (event as any).agent as string
-        const mfResult = (event as any).result as (SimulationResult & { simulation_id?: string; status?: string; entities?: string[]; personas?: string[]; report_summary?: string }) | undefined
+        const mfAgent = event.agent
+        const mfResult = event.result
         if (mfAgent === 'brand' && mfResult) {
           set({ mirofishBrandResult: mfResult, mirofishBrandPhase: 'completed' })
         } else if (mfAgent === 'market' && mfResult) {
@@ -456,7 +468,7 @@ export const useCouncilV2Store = create<CouncilV2State>((set) => ({
       }
 
       case 'mirofish_agent_error': {
-        const mfAgent = (event as any).agent as string
+        const mfAgent = event.agent
         if (mfAgent === 'brand') {
           set({ mirofishBrandPhase: 'failed' })
         } else if (mfAgent === 'market') {
@@ -508,6 +520,7 @@ export const useCouncilV2Store = create<CouncilV2State>((set) => ({
       activeSubagents: [],
       streamingSubagents: [],
       // MiroFish swarm state
+      mirofishEnabled: false,
       mirofishPhase: 'idle',
       mirofishBrandResult: null,
       mirofishMarketResult: null,

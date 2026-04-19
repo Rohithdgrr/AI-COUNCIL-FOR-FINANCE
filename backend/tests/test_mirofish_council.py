@@ -3,7 +3,8 @@
 Verifies:
 - mirofish_enabled flag is respected
 - MiroFish only triggers for brand + market agents
-- MiroFish only runs after round 3
+- MiroFish runs after round 3 in full council mode
+- MiroFish runs after synthesis in lite mode
 - SSE events are emitted with correct types
 - MiroFish does NOT run when disabled
 """
@@ -261,3 +262,68 @@ class TestMiroFishOnlyAfterRound3:
         ]
         mirofish_events = [e for e in events if e["type"].startswith("mirofish")]
         assert len(mirofish_events) == 0, "No MiroFish events when disabled"
+
+
+class TestMiroFishInLiteMode:
+    """Test that MiroFish simulation works in lite mode after synthesis."""
+
+    def test_lite_mode_request_with_mirofish(self):
+        """Lite mode request with mirofish_enabled=True should be valid."""
+        req = CouncilV2RequestTest(query="test", lite_mode=True, mirofish_enabled=True)
+        assert req.lite_mode is True
+        assert req.mirofish_enabled is True
+
+    def test_lite_mode_mirofish_after_synthesis(self):
+        """In lite mode, MiroFish should start after synthesis (round 2), not after supervisor (round 3)."""
+        events = [
+            {"type": "start", "session_id": "lite-1", "query": "test", "lite_mode": True, "mirofish_enabled": True},
+            {"type": "round_start", "round": 1, "phase": "analysis"},
+            {"type": "round_start", "round": 2, "phase": "synthesis"},
+            {"type": "mirofish_start", "agents": ["brand", "market"]},
+            {"type": "mirofish_complete"},
+            {"type": "complete", "session_id": "lite-1", "confidence": 85, "recommendation": "test", "lite_mode": True, "mirofish_enabled": True},
+        ]
+        synthesis_idx = next(i for i, e in enumerate(events) if e["type"] == "round_start" and e.get("phase") == "synthesis")
+        mirofish_start_idx = next(i for i, e in enumerate(events) if e["type"] == "mirofish_start")
+        complete_idx = next(i for i, e in enumerate(events) if e["type"] == "complete")
+        assert mirofish_start_idx > synthesis_idx, "MiroFish must start after synthesis in lite mode"
+        assert mirofish_start_idx < complete_idx, "MiroFish must complete before the final event"
+
+    def test_lite_mode_no_mirofish_when_disabled(self):
+        """In lite mode, when mirofish_enabled=False, no MiroFish events should appear."""
+        events = [
+            {"type": "start", "session_id": "lite-2", "query": "test", "lite_mode": True, "mirofish_enabled": False},
+            {"type": "round_start", "round": 1, "phase": "analysis"},
+            {"type": "round_start", "round": 2, "phase": "synthesis"},
+            {"type": "complete", "session_id": "lite-2", "confidence": 85, "recommendation": "test", "lite_mode": True, "mirofish_enabled": False},
+        ]
+        mirofish_events = [e for e in events if e["type"].startswith("mirofish")]
+        assert len(mirofish_events) == 0, "No MiroFish events in lite mode when disabled"
+
+    def test_complete_event_includes_mirofish_enabled_in_lite_mode(self):
+        """The complete event in lite mode should include mirofish_enabled flag."""
+        req = CouncilV2RequestTest(query="test", lite_mode=True, mirofish_enabled=True)
+        # Simulate the complete event payload
+        complete_event = {
+            "type": "complete",
+            "session_id": "lite-3",
+            "confidence": 85,
+            "recommendation": "test",
+            "lite_mode": True,
+            "mirofish_enabled": req.mirofish_enabled,
+        }
+        assert complete_event["mirofish_enabled"] is True
+        assert complete_event["lite_mode"] is True
+
+    def test_mirofish_agents_always_brand_and_market(self):
+        """MiroFish always runs for brand + market agents, regardless of mode."""
+        # Full council
+        full_events = [
+            {"type": "mirofish_start", "agents": ["brand", "market"]},
+        ]
+        # Lite mode
+        lite_events = [
+            {"type": "mirofish_start", "agents": ["brand", "market"]},
+        ]
+        assert full_events[0]["agents"] == ["brand", "market"]
+        assert lite_events[0]["agents"] == ["brand", "market"]

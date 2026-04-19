@@ -15,6 +15,7 @@ from typing import Optional
 
 from backend.state import CouncilState, AgentOutput, BrandSentiment
 from backend.llm.router import llm_router
+from backend.utils.parsing import parse_confidence
 
 logger = logging.getLogger(__name__)
 
@@ -146,21 +147,6 @@ def _get_rag_context(state: CouncilState) -> str:
     context = state.get("context") or {}
     rag_contexts = context.get("rag_contexts") or {}
     return rag_contexts.get("brand", "")
-
-
-def _parse_confidence(text: str, default: float = 50.0) -> float:
-    """Extract confidence score from LLM response text."""
-    patterns = [
-        r"confidence[:\s]+(\d+(?:\.\d+)?)",
-        r"confidence\s+score[:\s]+(\d+(?:\.\d+)?)",
-        r"(\d+(?:\.\d+)?)\s*%\s*confidence",
-    ]
-    for pattern in patterns:
-        match = re.search(pattern, text, re.IGNORECASE)
-        if match:
-            val = float(match.group(1))
-            return min(val, 100.0) if val > 1 else val * 100
-    return default
 
 
 def _parse_sentiment(text: str) -> str:
@@ -306,7 +292,7 @@ async def brand_agent(state: CouncilState) -> dict:
     try:
         response, model_used = await llm_router.invoke_with_fallback("brand", messages)
         content = response.content
-        confidence = _parse_confidence(content)
+        confidence = parse_confidence(content)
         sentiment = _parse_sentiment(content)
         key_points = _extract_key_points(content)
 

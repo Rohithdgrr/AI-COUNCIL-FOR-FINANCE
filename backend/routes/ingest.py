@@ -77,3 +77,32 @@ async def ingest_social(request: SocialIngestRequest):
         logger.warning(f"Social ingest DB write failed: {e}")
 
     return {"status": "ok", "posts_ingested": count, "platform": request.platform}
+
+
+@router.get("/status")
+async def ingest_status():
+    """Get ingest system status."""
+    try:
+        from backend.db.neon import execute_query
+        
+        # Get counts from each ingest table
+        erp_count = await execute_query("SELECT COUNT(*) FROM ingested_erp")
+        news_count = await execute_query("SELECT COUNT(*) FROM ingested_news")
+        social_count = await execute_query("SELECT COUNT(*) FROM ingested_social")
+        
+        return {
+            "status": "active",
+            "erp_records": erp_count[0]['count'] if erp_count else 0,
+            "news_articles": news_count[0]['count'] if news_count else 0,
+            "social_posts": social_count[0]['count'] if social_count else 0,
+            "last_updated": time.time()
+        }
+    except Exception as e:
+        logger.warning(f"Ingest status check failed: {e}")
+        return {
+            "status": "idle",
+            "erp_records": 0,
+            "news_articles": 0,
+            "social_posts": 0,
+            "last_updated": time.time()
+        }

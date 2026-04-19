@@ -1,0 +1,150 @@
+# Pre-commit hooks for code quality automation
+# Install: pip install pre-commit
+# Setup: pre-commit install
+# Run manually: pre-commit run --all-files
+
+repos:
+  # Python formatting with Black
+  - repo: https://github.com/psf/black
+    rev: 24.3.0
+    hooks:
+      - id: black
+        language_version: python3.11
+        args: ['--line-length=100']
+        files: ^backend/
+
+  # Python linting with Ruff (faster than flake8)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.3.4
+    hooks:
+      - id: ruff
+        args: ['--fix', '--exit-non-zero-on-fix']
+        files: ^backend/
+
+  # Python import sorting
+  - repo: https://github.com/pycqa/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        args: ['--profile', 'black', '--line-length', '100']
+        files: ^backend/
+
+  # Python type checking with mypy
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.9.0
+    hooks:
+      - id: mypy
+        additional_dependencies: [types-all]
+        args: ['--ignore-missing-imports', '--no-strict-optional']
+        files: ^backend/
+
+  # JavaScript/TypeScript formatting with Prettier
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v4.0.0-alpha.8
+    hooks:
+      - id: prettier
+        types_or: [javascript, jsx, ts, tsx, json, css, scss, markdown]
+        args: ['--write', '--print-width', '100', '--single-quote', '--trailing-comma', 'es5']
+        files: ^frontend/
+
+  # TypeScript/JavaScript linting with ESLint
+  - repo: https://github.com/pre-commit/mirrors-eslint
+    rev: v9.0.0
+    hooks:
+      - id: eslint
+        files: ^frontend/.*\.[jt]sx?$
+        types: [file]
+        args: ['--fix', '--max-warnings', '0']
+        additional_dependencies:
+          - eslint@8.57.0
+          - '@typescript-eslint/eslint-plugin@7.4.0'
+          - '@typescript-eslint/parser@7.4.0'
+
+  # General file checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      # Prevent large files from being committed
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      
+      # Check for files that would conflict in case-insensitive filesystems
+      - id: check-case-conflict
+      
+      # Check for merge conflict strings
+      - id: check-merge-conflict
+      
+      # Check YAML syntax
+      - id: check-yaml
+        args: ['--unsafe']  # Allow custom tags
+      
+      # Check JSON syntax
+      - id: check-json
+      
+      # Check TOML syntax
+      - id: check-toml
+      
+      # Ensure files end with newline
+      - id: end-of-file-fixer
+      
+      # Remove trailing whitespace
+      - id: trailing-whitespace
+        args: ['--markdown-linebreak-ext=md']
+      
+      # Prevent committing to main/master
+      - id: no-commit-to-branch
+        args: ['--branch', 'main', '--branch', 'master']
+      
+      # Check for private keys
+      - id: detect-private-key
+      
+      # Check for AWS credentials
+      - id: detect-aws-credentials
+        args: ['--allow-missing-credentials']
+
+  # Security checks for Python
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.7.8
+    hooks:
+      - id: bandit
+        args: ['-c', 'pyproject.toml', '-r', 'backend/']
+        additional_dependencies: ['bandit[toml]']
+
+  # Dockerfile linting
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.12.0
+    hooks:
+      - id: hadolint-docker
+        args: ['--ignore', 'DL3008', '--ignore', 'DL3013']
+
+  # Markdown linting
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.39.0
+    hooks:
+      - id: markdownlint
+        args: ['--fix']
+
+# Configuration for specific hooks
+default_language_version:
+  python: python3.11
+  node: 20.11.0
+
+# Files to exclude from all hooks
+exclude: |
+  (?x)^(
+    .*/__pycache__/.*|
+    .*/.pytest_cache/.*|
+    .*/node_modules/.*|
+    .*/dist/.*|
+    .*/build/.*|
+    .*/.venv/.*|
+    .*/.git/.*|
+    .*/migrations/.*|
+    .*\.min\.(js|css)$
+  )$
+
+# Fail fast - stop on first failure
+fail_fast: false
+
+# Minimum pre-commit version
+minimum_pre_commit_version: '3.0.0'

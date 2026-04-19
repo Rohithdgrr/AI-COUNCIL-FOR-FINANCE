@@ -1,5 +1,6 @@
 import axios from 'axios'
 import type { APIError } from '@/types/api'
+import { apiKeyManager } from './secureStorage'
 
 const API_BASE = '/api'
 
@@ -9,10 +10,12 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
-// Request interceptor — attach API key
+// Request interceptor — attach API key securely
 api.interceptors.request.use((config) => {
-  const apiKey = localStorage.getItem('api_key') || 'dev-key'
-  config.headers['X-API-Key'] = apiKey
+  const apiKey = apiKeyManager.getApiKey()
+  if (apiKey) {
+    config.headers['X-API-Key'] = apiKey
+  }
   return config
 })
 
@@ -47,8 +50,10 @@ const mcpApi = axios.create({
 })
 
 mcpApi.interceptors.request.use((config) => {
-  const mcpKey = localStorage.getItem('mcp_api_key') || 'dev-mcp-key'
-  config.headers['X-MCP-API-Key'] = mcpKey
+  const mcpKey = apiKeyManager.getMcpApiKey()
+  if (mcpKey) {
+    config.headers['X-MCP-API-Key'] = mcpKey
+  }
   return config
 })
 
@@ -155,6 +160,10 @@ export const marketApi = {
   company: (symbol: string) => api.get(`/market/company/${symbol}`),
   riskDashboard: () => api.get('/market/risk-dashboard'),
   brandIntel: () => api.get('/market/brand-intel'),
+  forexRates: () => api.get('/market/forex-rates'),
+  commodityPrices: () => api.get('/market/commodity-prices'),
+  supplyChainStocks: () => api.get('/market/supply-chain-stocks'),
+  globalNews: () => api.get('/market/global-news'),
 }
 
 export { api, mcpApi }

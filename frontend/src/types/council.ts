@@ -294,14 +294,39 @@ export interface SimulationConfig {
   focus_areas: string[]
 }
 
+export interface ScenarioDetail {
+  name: string
+  probability: number
+  description: string
+  impact: 'low' | 'medium' | 'high' | 'critical'
+  key_drivers: string[]
+  timeline: string
+  affected_entities: string[]
+}
+
+export interface SourceReference {
+  title: string
+  url: string
+  type: string
+  relevance: number
+  snippet: string
+}
+
 export interface SimulationResult {
   prediction: string
   confidence: number
   key_factors: string[]
-  scenarios: Record<string, unknown>[]
+  scenarios: ScenarioDetail[] | Record<string, unknown>[]
   risks: string[]
   opportunities: string[]
   recommendations: string[]
+  sources?: SourceReference[]
+  detailed_explanation?: string
+  methodology?: string
+  assumptions?: string[]
+  data_quality_score?: number
+  sentiment_trajectory?: { round: number; shifts: Record<string, number>; events: string[] }[]
+  persona_details?: { name: string; role: string; traits: string[]; goals: string[]; position: Record<string, number>; key_interactions: { round: number; response: string }[] }[]
 }
 
 export interface SimulationRound {

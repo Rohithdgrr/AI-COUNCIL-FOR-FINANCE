@@ -279,4 +279,155 @@ describe('councilV2Store - MiroFish events', () => {
     handleV2Event({ type: 'mirofish_complete' })
     expect(useCouncilV2Store.getState().mirofishPhase).toBe('completed')
   })
+
+  it('tracks mirofishEnabled from start event', () => {
+    expect(useCouncilV2Store.getState().mirofishEnabled).toBe(false)
+
+    useCouncilV2Store.getState().handleV2Event({
+      type: 'start',
+      session_id: 'test-session',
+      query: 'test query',
+      mirofish_enabled: true,
+    })
+    expect(useCouncilV2Store.getState().mirofishEnabled).toBe(true)
+  })
+
+  it('tracks mirofishEnabled=false from start event', () => {
+    useCouncilV2Store.getState().handleV2Event({
+      type: 'start',
+      session_id: 'test-session',
+      query: 'test query',
+      mirofish_enabled: false,
+    })
+    expect(useCouncilV2Store.getState().mirofishEnabled).toBe(false)
+  })
+
+  it('resets mirofishEnabled to false', () => {
+    useCouncilV2Store.getState().handleV2Event({
+      type: 'start',
+      session_id: 'test-session',
+      query: 'test query',
+      mirofish_enabled: true,
+    })
+    expect(useCouncilV2Store.getState().mirofishEnabled).toBe(true)
+
+    useCouncilV2Store.getState().reset()
+    expect(useCouncilV2Store.getState().mirofishEnabled).toBe(false)
+  })
+
+  it('MiroFish works in lite mode: start event with lite_mode=true followed by mirofish events', () => {
+    const { handleV2Event } = useCouncilV2Store.getState()
+
+    // Start lite mode session with mirofish enabled
+    handleV2Event({
+      type: 'start',
+      session_id: 'lite-session',
+      query: 'test query',
+      lite_mode: true,
+      mirofish_enabled: true,
+    })
+    expect(useCouncilV2Store.getState().liteMode).toBe(true)
+    expect(useCouncilV2Store.getState().mirofishEnabled).toBe(true)
+
+    // Lite mode round 1 (analysis)
+    handleV2Event({ type: 'round_start', round: 1, phase: 'analysis' })
+
+    // Lite mode round 2 (synthesis)
+    handleV2Event({ type: 'round_start', round: 2, phase: 'synthesis' })
+
+    // MiroFish starts after synthesis in lite mode
+    handleV2Event({ type: 'mirofish_start', agents: ['brand', 'market'] })
+    expect(useCouncilV2Store.getState().mirofishPhase).toBe('graph_building')
+
+    // Brand completes
+    handleV2Event({
+      type: 'mirofish_agent_complete',
+      agent: 'brand',
+      result: {
+        prediction: 'Brand positive',
+        confidence: 0.85,
+        key_factors: ['Trust'],
+        scenarios: [{ name: 'Bullish', probability: 0.6, description: 'Strong growth' }],
+        risks: ['Backlash'],
+        opportunities: ['Partnerships'],
+        recommendations: ['Invest'],
+      },
+    })
+    expect(useCouncilV2Store.getState().mirofishBrandPhase).toBe('completed')
+    expect(useCouncilV2Store.getState().mirofishBrandResult!.scenarios.length).toBe(1)
+
+    // Market completes
+    handleV2Event({
+      type: 'mirofish_agent_complete',
+      agent: 'market',
+      result: {
+        prediction: 'Market stable',
+        confidence: 0.7,
+        key_factors: ['Demand'],
+        scenarios: [{ name: 'Stable', probability: 0.5, description: 'Flat growth' }],
+        risks: ['Recession'],
+        opportunities: ['Expansion'],
+        recommendations: ['Diversify'],
+      },
+    })
+
+    // MiroFish complete
+    handleV2Event({ type: 'mirofish_complete' })
+    expect(useCouncilV2Store.getState().mirofishPhase).toBe('completed')
+
+    // Session complete (lite mode)
+    handleV2Event({
+      type: 'complete',
+      session_id: 'lite-session',
+      confidence: 85,
+      recommendation: 'Final answer',
+      mirofish_enabled: true,
+    })
+    expect(useCouncilV2Store.getState().isStreaming).toBe(false)
+    expect(useCouncilV2Store.getState().liteMode).toBe(true)
+  })
+
+  it('MiroFish works in full council mode: start event with lite_mode=false followed by mirofish after round 3', () => {
+    const { handleV2Event } = useCouncilV2Store.getState()
+
+    // Start full council session with mirofish enabled
+    handleV2Event({
+      type: 'start',
+      session_id: 'council-session',
+      query: 'test query',
+      lite_mode: false,
+      mirofish_enabled: true,
+    })
+    expect(useCouncilV2Store.getState().liteMode).toBe(false)
+    expect(useCouncilV2Store.getState().mirofishEnabled).toBe(true)
+
+    // Round 1, 2, 3
+    handleV2Event({ type: 'round_start', round: 1, phase: 'analysis' })
+    handleV2Event({ type: 'round_start', round: 2, phase: 'debate' })
+    handleV2Event({ type: 'round_start', round: 3, phase: 'supervisor' })
+    handleV2Event({ type: 'supervisor_done', round: 3, confidence: 85 })
+
+    // MiroFish starts after supervisor in full council mode
+    handleV2Event({ type: 'mirofish_start', agents: ['brand', 'market'] })
+    expect(useCouncilV2Store.getState().mirofishPhase).toBe('graph_building')
+
+    handleV2Event({ type: 'mirofish_complete' })
+    expect(useCouncilV2Store.getState().mirofishPhase).toBe('completed')
+  })
+
+  it('start event resets mirofish state for new session', () => {
+    const { handleV2Event } = useCouncilV2Store.getState()
+
+    // First session with mirofish
+    handleV2Event({ type: 'start', session_id: 's1', query: 'q1', mirofish_enabled: true })
+    handleV2Event({ type: 'mirofish_start', agents: ['brand', 'market'] })
+    handleV2Event({ type: 'mirofish_agent_progress', agent: 'brand', phase: 'graph_ready', entities: ['E1'] })
+    expect(useCouncilV2Store.getState().mirofishBrandEntities).toEqual(['E1'])
+
+    // New session resets mirofish state
+    handleV2Event({ type: 'start', session_id: 's2', query: 'q2', mirofish_enabled: false })
+    expect(useCouncilV2Store.getState().mirofishPhase).toBe('idle')
+    expect(useCouncilV2Store.getState().mirofishBrandEntities).toEqual([])
+    expect(useCouncilV2Store.getState().mirofishEnabled).toBe(false)
+  })
 })

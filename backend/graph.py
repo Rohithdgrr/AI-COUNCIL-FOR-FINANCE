@@ -8,6 +8,7 @@ from backend.agents.market_agent import market_agent
 from backend.agents.finance_agent import finance_agent
 from backend.agents.brand_agent import brand_agent
 from backend.graph_utils import node_error_handler
+from backend.graph_astra_integration import astra_parallel_node
 import logging
 import json
 import time
@@ -243,6 +244,7 @@ def build_council_graph() -> StateGraph:
     graph.add_node("dynamic_routing", dynamic_routing_node)
     graph.add_node("rag_prefetch", rag_prefetch)
     graph.add_node("mcp_escalation", mcp_escalation)
+    graph.add_node("astra_parallel", astra_parallel_node)  # ⭐ Astra integration
     graph.add_node("risk", risk_agent)
     graph.add_node("supply", supply_agent)
     graph.add_node("logistics", logistics_agent)
@@ -257,13 +259,14 @@ def build_council_graph() -> StateGraph:
 
     graph.set_entry_point("moderator")
 
-    # Phase 1: Moderator → Dynamic Routing → RAG → MCP → Agent fan-out
+    # Phase 1: Moderator → Dynamic Routing → RAG → MCP → Astra (parallel) → Agent fan-out
     graph.add_edge("moderator", "dynamic_routing")
     graph.add_edge("dynamic_routing", "rag_prefetch")
     graph.add_edge("rag_prefetch", "mcp_escalation")
+    graph.add_edge("mcp_escalation", "astra_parallel")  # ⭐ Astra runs in parallel
 
     # Single conditional edge for all agents — returns dict of all agents that should run
-    graph.add_conditional_edges("mcp_escalation", _agent_fanout, [
+    graph.add_conditional_edges("astra_parallel", _agent_fanout, [
         "risk", "supply", "logistics", "market", "finance", "brand", "predictions"
     ])
 
@@ -673,6 +676,8 @@ async def run_council_streaming(
         "support_evidence": [],
         "evidence_bundle": None,
         "subagent_evidence": [],
+        # Astra ⭐ Integration
+        "astra_results": None,
     }
 
     is_lite = initial_state["lite_mode"]
@@ -719,6 +724,26 @@ async def run_council_streaming(
                         await ws_callback(payload)
                     except Exception:
                         pass
+
+            elif node_name == "astra_parallel":
+                # ⭐ Stream Astra simulation results
+                astra_results = output.get("astra_results")
+                if astra_results:
+                    payload = {
+                        "type": "astra_results",
+                        "data": {
+                            "session_id": session_id,
+                            "astra_results": astra_results,
+                            "brand_status": astra_results.get("brand", {}).get("status", "unknown"),
+                            "market_status": astra_results.get("market", {}).get("status", "unknown"),
+                        },
+                    }
+                    yield payload
+                    if ws_callback:
+                        try:
+                            await ws_callback(payload)
+                        except Exception:
+                            pass
 
             elif node_name == "debate":
                 payload = {
@@ -807,6 +832,7 @@ async def run_council_streaming(
             "lite_mode": final_state.get("lite_mode", False),
             "primary_agent": final_state.get("primary_agent"),
             "evidence_bundle": final_state.get("evidence_bundle"),
+            "astra_results": final_state.get("astra_results"),  # ⭐ Include Astra results
         }
         await cache_set(f"council_session:{session_id}", session_data, ttl=settings.session_store_ttl)
     except Exception as e:

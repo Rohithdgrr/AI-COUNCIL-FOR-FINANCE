@@ -56,7 +56,7 @@ export default function SimulationPanel({ agentType, accentColor = '#3b82f6', on
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full" style={{ backgroundColor: accentColor }} />
           <span className="text-xs font-bold uppercase tracking-wider" style={{ color: accentColor }}>
-            MiroFish Simulation
+            Astra ⭐ Simulation
           </span>
           <span className="text-[10px] text-gray-400 font-medium">
             ({agentType} agent)

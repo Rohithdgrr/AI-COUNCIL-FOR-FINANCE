@@ -27,7 +27,7 @@ class SimulationRunRequest(BaseModel):
     query: str = Field(..., description="Scenario/prediction question")
     agent_type: str = Field(default="brand", description="Agent requesting simulation (brand/market)")
     horizon_days: int = Field(default=30, ge=1, le=365)
-    num_personas: int = Field(default=5, ge=2, le=20)
+    num_personas: int = Field(default=50, ge=2, le=200)
     rounds: int = Field(default=3, ge=1, le=10)
     focus_areas: List[str] = Field(default_factory=list)
     stream: bool = Field(default=True, description="Stream results via SSE")
@@ -71,7 +71,7 @@ async def run_simulation(request: SimulationRunRequest):
 
             from backend.mirofish.graph_builder import GraphBuilder
             graph_builder = GraphBuilder()
-            entities, relationships = await graph_builder.build_graph(request.query)
+            entities, relationships = await graph_builder.build_graph(request.query, fast_mode=True)
             entity_names = [e.name for e in entities]
 
             yield f"data: {json.dumps({'type': 'sim_graph_ready', 'simulation_id': sim_id, 'entities': entity_names, 'entity_count': len(entities), 'relationship_count': len(relationships)})}\n\n"
@@ -204,3 +204,133 @@ async def get_simulation(simulation_id: str):
         return {"error": f"Simulation {simulation_id} not found"}
 
     return sim_data
+
+
+class SwarmSimulateRequest(BaseModel):
+    query: str = Field(..., description="Scenario/prediction question for swarm simulation")
+    horizon_days: int = Field(default=30, ge=1, le=365)
+    num_personas: int = Field(default=50, ge=2, le=200)
+    rounds: int = Field(default=3, ge=1, le=10)
+
+
+@router.post("/swarm")
+async def run_swarm_simulation(request: SwarmSimulateRequest):
+    """Run MiroFish swarm simulation for brand + market agents in parallel.
+    Streams SSE events compatible with the councilV2Store mirofish handlers.
+    """
+
+    async def _run_agent(agent_type: str, queue: asyncio.Queue):
+        """Run MiroFish simulation for a single agent, pushing SSE events to queue in real-time."""
+        from backend.mirofish.simulation_engine import SimulationEngine
+        from backend.mirofish.graph_builder import GraphBuilder
+        from backend.mirofish.persona_generator import PersonaGenerator
+        from backend.mirofish.schemas import SimulationConfig, SimulationState
+
+        sim_id = f"{agent_type}_sim_{uuid.uuid4().hex[:8]}"
+
+        def _emit(event_data: dict):
+            queue.put_nowait(f"data: {json.dumps(event_data)}\n\n")
+
+        try:
+            # Phase 1: Graph building (fast_mode=True by default)
+            _emit({'type': 'mirofish_agent_progress', 'agent': agent_type, 'phase': 'graph_building', 'simulation_id': sim_id})
+            graph_builder = GraphBuilder()
+            entities, relationships = await graph_builder.build_graph(request.query, fast_mode=True)
+            entity_names = [e.name for e in entities]
+
+            _emit({'type': 'mirofish_agent_progress', 'agent': agent_type, 'phase': 'graph_ready', 'simulation_id': sim_id, 'entities': entity_names, 'entity_count': len(entities)})
+
+            # Phase 2: Persona generation (batch mode)
+            _emit({'type': 'mirofish_agent_progress', 'agent': agent_type, 'phase': 'persona_generation', 'simulation_id': sim_id})
+            config = SimulationConfig(
+                name=sim_id,
+                seed_query=request.query,
+                horizon_days=request.horizon_days,
+                num_personas=request.num_personas,
+                rounds=request.rounds,
+            )
+            persona_gen = PersonaGenerator()
+            personas = await persona_gen.generate_personas(entities, relationships, config)
+            persona_names = [f"{p.name} ({p.role.value})" for p in personas]
+
+            _emit({'type': 'mirofish_agent_progress', 'agent': agent_type, 'phase': 'personas_ready', 'simulation_id': sim_id, 'personas': persona_names, 'persona_count': len(personas)})
+
+            # Phase 3: Run simulation (batched by role)
+            _emit({'type': 'mirofish_agent_progress', 'agent': agent_type, 'phase': 'simulation_running', 'simulation_id': sim_id})
+            state = SimulationState(
+                id=sim_id,
+                config=config,
+                entities=entities,
+                relationships=relationships,
+                personas=personas,
+                agent_type=agent_type,
+                parent_query=request.query,
+            )
+            engine = SimulationEngine()
+            state = await engine.run_simulation(state)
+
+            # Phase 4: Report
+            _emit({'type': 'mirofish_agent_progress', 'agent': agent_type, 'phase': 'report_generation', 'simulation_id': sim_id})
+            from backend.mirofish.report_agent import ReportAgent
+            report_agent = ReportAgent()
+            report = await report_agent.generate_report(state, report_type="full")
+
+            result = {
+                "simulation_id": sim_id,
+                "status": state.status,
+                "prediction": state.result.prediction if state.result else "Simulation failed",
+                "confidence": state.result.confidence if state.result else 0.0,
+                "key_factors": state.result.key_factors if state.result else [],
+                "risks": state.result.risks if state.result else [],
+                "opportunities": state.result.opportunities if state.result else [],
+                "recommendations": state.result.recommendations if state.result else [],
+                "scenarios": report.get("scenarios", state.result.scenarios if state.result else []),
+                "entities": entity_names,
+                "personas": persona_names,
+                "report_summary": report.get("prediction", "")[:200] if report else "",
+                "detailed_explanation": report.get("detailed_explanation", "") if report else "",
+                "methodology": report.get("methodology", "") if report else "",
+                "assumptions": report.get("assumptions", []) if report else [],
+                "sources": report.get("sources", []) if report else [],
+                "data_quality_score": report.get("data_quality_score", 0.0) if report else 0.0,
+                "sentiment_trajectory": report.get("sentiment_trajectory", []) if report else [],
+                "persona_details": report.get("personas", []) if report else [],
+            }
+
+            _emit({'type': 'mirofish_agent_complete', 'agent': agent_type, 'result': result})
+
+            # Store result
+            _simulation_store[sim_id] = {
+                "state": state.model_dump(),
+                "report": report,
+            }
+
+        except Exception as e:
+            logger.error(f"MiroFish swarm simulation for {agent_type} failed: {e}")
+            _emit({'type': 'mirofish_agent_error', 'agent': agent_type, 'error': str(e)})
+
+    async def _stream():
+        queue: asyncio.Queue[str] = asyncio.Queue()
+
+        yield f"data: {json.dumps({'type': 'mirofish_start', 'agents': ['brand', 'market']})}\n\n"
+
+        # Run brand and market in parallel, pushing events to queue in real-time
+        async def _producer():
+            await asyncio.gather(
+                _run_agent("brand", queue),
+                _run_agent("market", queue),
+            )
+            await queue.put(None)  # sentinel
+
+        producer_task = asyncio.create_task(_producer())
+
+        # Stream events from queue as they arrive
+        while True:
+            event = await queue.get()
+            if event is None:
+                break
+            yield event
+
+        yield f"data: {json.dumps({'type': 'mirofish_complete'})}\n\n"
+
+    return StreamingResponse(_stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"})

@@ -23,6 +23,7 @@ import time as _time
 
 from backend.state import CouncilState, AgentOutput, DebateRound
 from backend.llm.router import llm_router
+from backend.utils.parsing import parse_confidence
 from backend.observability.langsmith_config import (
     CouncilTracer, record_debate_round, record_agent_call,
 )
@@ -323,7 +324,7 @@ class DebateEngine:
             try:
                 response, model_used = await llm_router.invoke_with_fallback(challenger.agent, messages)
                 # Parse updated confidence from response
-                updated_conf = self._parse_confidence(response.content, challenger.confidence)
+                updated_conf = parse_confidence(response.content, challenger.confidence)
 
                 challenges.append({
                     "agent": challenger.agent,
@@ -423,7 +424,7 @@ class DebateEngine:
                 response, model_used = await llm_router.invoke_with_fallback("moderator", messages)
             recommendation = response.content
             # Parse confidence and risk from response
-            final_confidence = self._parse_confidence(response.content, last_round.get("round_confidence", 50))
+            final_confidence = parse_confidence(response.content, last_round.get("round_confidence", 50))
             risk_score = self._parse_risk_score(response.content, 50)
         except Exception as e:
             logger.error(f"Final synthesis failed: {e}")
@@ -477,22 +478,6 @@ class DebateEngine:
                     return o
 
         return best_target
-
-    def _parse_confidence(self, text: str, default: float) -> float:
-        """Extract confidence score from LLM response text."""
-        import re
-        patterns = [
-            r"confidence[:\s]+(\d+(?:\.\d+)?)",
-            r"confidence\s+score[:\s]+(\d+(?:\.\d+)?)",
-            r"(\d+(?:\.\d+)?)\s*%\s*confidence",
-            r"overall\s+council\s+confidence[:\s]+(\d+(?:\.\d+)?)",
-        ]
-        for pattern in patterns:
-            match = re.search(pattern, text, re.IGNORECASE)
-            if match:
-                val = float(match.group(1))
-                return min(val, 100.0) if val > 1 else val * 100
-        return default
 
     def _parse_risk_score(self, text: str, default: float) -> float:
         """Extract risk score from LLM response text."""

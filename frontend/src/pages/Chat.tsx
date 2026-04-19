@@ -459,10 +459,9 @@ export default function Chat() {
           </div>
 
           {/* Input (fixed) */}
-          <div className="fixed bottom-0 left-0 right-0 z-50">
-            <div className="px-4 sm:px-6 pb-4 pt-3 bg-white/80 backdrop-blur-xl border-t border-gray-200">
-              <div className="max-w-6xl mx-auto">
-                <div className="bg-white border border-gray-200 rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.08)] overflow-hidden">
+          <div className="fixed bottom-0 left-0 right-0 z-50 pointer-events-none">
+            <div className="max-w-6xl mx-auto px-4 sm:px-6 pb-4 pt-3">
+              <div className="bg-white/70 backdrop-blur-2xl border border-gray-200/60 rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.06)] overflow-hidden pointer-events-auto">
               <form onSubmit={handleSubmit} className="flex flex-col">
                 {/* Text Input Area */}
                 <div className="px-5 pt-4 pb-2">
@@ -550,10 +549,9 @@ export default function Chat() {
                   </div>
                 </div>
               </form>
-                </div>
-              </div>
             </div>
           </div>
+        </div>
         </div>
 
         {/* Right: Agent Tabs */}

@@ -1,14 +1,15 @@
 import { useState, useEffect } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { Shield, MessageSquare, Eye, Settings, Wifi, WifiOff, Menu, X, Activity, Zap, Wrench, Fish } from 'lucide-react'
+import { Shield, MessageSquare, Eye, Settings, Wifi, WifiOff, Menu, X, Activity, Zap, Wrench, Star, Database } from 'lucide-react'
 import { healthApi } from '@/lib/api'
 import Dock from '@/components/ui/Dock'
+import { useCouncilV2Store } from '@/store/councilV2Store'
 
 const navItems = [
   { path: '/', label: 'Dashboard', icon: Shield },
   { path: '/chat', label: 'Council Chat', icon: MessageSquare },
   { path: '/mcp', label: 'MCP Explorer', icon: Wrench },
-  { path: '/rag', label: 'Swarm Visualizer', icon: Fish },
+  { path: '/rag', label: 'Astra Swarm', icon: Star },
   { path: '/brand', label: 'Brand Intel', icon: Eye },
   { path: '/settings', label: 'Settings', icon: Settings },
 ]
@@ -21,6 +22,35 @@ const AGENT_COLORS = [
   { name: 'Finance Guardian', hex: '#059669' },
   { name: 'Brand Protector', hex: '#EC4899' },
 ]
+
+function MiroFishIndicator() {
+  const { mirofishPhase, mirofishEnabled } = useCouncilV2Store()
+  const isRunning = mirofishPhase !== 'idle' && mirofishPhase !== 'completed' && mirofishPhase !== 'failed'
+  const isComplete = mirofishPhase === 'completed'
+  const isFailed = mirofishPhase === 'failed'
+
+  if (!mirofishEnabled && !isRunning && !isComplete && !isFailed) return null
+
+  return (
+    <Link
+      to="/rag"
+      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-sm text-[9px] font-black uppercase tracking-widest transition-all duration-300 ${
+        isRunning ? 'bg-cyan-50 text-cyan-700 border border-cyan-200 shadow-[0_0_10px_rgba(34,211,238,0.2)] animate-pulse' :
+        isComplete ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+        isFailed ? 'bg-red-50 text-red-700 border border-red-200' :
+        'bg-slate-50 text-slate-500 border border-slate-200 hover:bg-white'
+      }`}
+    >
+      <Star className={`w-3.5 h-3.5 ${isRunning ? 'text-cyan-500' : ''}`} />
+      <span>
+        {isRunning ? mirofishPhase.replace(/_/g, ' ') :
+         isComplete ? 'Swarm Done' :
+         isFailed ? 'Swarm Fail' :
+         'Astra Array'}
+      </span>
+    </Link>
+  )
+}
 
 export default function Navbar() {
   const location = useLocation()
@@ -46,27 +76,20 @@ export default function Navbar() {
     <>
       {/* ─── Desktop Top Navigation ─── */}
       <header className="hidden lg:block fixed top-0 left-0 right-0 z-50">
-        <div 
-          className="mx-auto backdrop-blur-2xl border-b shadow-sm"
-          style={{
-            background: 'linear-gradient(135deg, rgba(255,255,255,0.92) 0%, rgba(248,250,252,0.95) 100%)',
-            borderColor: 'rgba(0,0,0,0.06)',
-          }}
-        >
-          <div className="max-w-[1600px] mx-auto px-6 h-16 flex items-center justify-between">
+        <div className="mx-auto bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-sm">
+          <div className="max-w-[1700px] mx-auto px-6 h-16 flex items-center justify-between">
             {/* Left: Brand */}
             <Link to="/" className="flex items-center gap-3 group">
               <div className="relative">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 via-violet-600 to-purple-600 flex items-center justify-center shadow-lg shadow-blue-500/25 group-hover:shadow-blue-500/40 transition-shadow duration-300">
-                  <Zap className="w-5 h-5 text-white" />
+                <div className="w-10 h-10 rounded-md bg-slate-900 border border-slate-800 flex items-center justify-center shadow-lg shadow-slate-900/20 group-hover:bg-slate-800 transition-all duration-300">
+                  <Zap className="w-5 h-5 text-cyan-400 group-hover:text-cyan-300 transition-colors" />
                 </div>
-                <div className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-400 rounded-full border-2 border-white animate-pulse" />
               </div>
               <div className="flex flex-col">
-                <span className="text-[17px] font-bold font-heading tracking-tight text-gray-900 group-hover:text-blue-700 transition-colors">
-                  SupplyChain<span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-violet-600">GPT</span>
+                <span className="text-xl font-black font-heading tracking-tight text-slate-900 group-hover:text-slate-700 transition-colors">
+                  Astra<span className="text-cyan-600">Core</span>
                 </span>
-                <span className="text-[10px] font-heading font-medium text-gray-400 tracking-widest uppercase -mt-0.5">AI Council Platform</span>
+                <span className="text-[9px] font-black font-heading text-slate-500 tracking-[0.2em] uppercase mt-0.5">Global Protocol Array</span>
               </div>
             </Link>
 
@@ -86,35 +109,29 @@ export default function Navbar() {
 
 
             {/* Right: Agent dots + Server status */}
-            <div className="flex items-center gap-4">
-              {/* Agent Dots */}
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gray-50 border border-gray-100">
-                <Activity className="w-3 h-3 text-gray-400 mr-1" />
-                {AGENT_COLORS.map((agent) => (
-                  <div
-                    key={agent.name}
-                    className="w-2.5 h-2.5 rounded-full hover:scale-150 transition-transform duration-200 cursor-default"
-                    style={{ backgroundColor: agent.hex }}
-                    title={agent.name}
-                  />
-                ))}
-                <span className="ml-1.5 text-[10px] font-bold font-heading text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">6/6</span>
-              </div>
+            <div className="flex items-center gap-3">
+              {/* Astra Status */}
+              <MiroFishIndicator />
 
-              {/* Server Status */}
+              {/* Server Status Animation Improved */}
               <div
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-medium ${
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-sm border transition-all duration-300 ${
                   serverOnline
-                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
-                    : 'bg-red-50 text-red-600 border border-red-100'
+                    ? 'bg-slate-900 text-white border-slate-800'
+                    : 'bg-red-50 text-red-600 border-red-200'
                 }`}
               >
                 {serverOnline ? (
-                  <Wifi className="w-3.5 h-3.5" />
+                  <div className="relative flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-none bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)] animate-pulse" />
+                    <span className="text-[9px] font-black uppercase tracking-widest">Sys Online</span>
+                  </div>
                 ) : (
-                  <WifiOff className="w-3.5 h-3.5" />
+                  <div className="relative flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-none bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.8)]" />
+                    <span className="text-[9px] font-black uppercase tracking-widest">Off-Grid</span>
+                  </div>
                 )}
-                {serverOnline ? 'Online' : 'Offline'}
               </div>
             </div>
           </div>
@@ -176,18 +193,6 @@ export default function Navbar() {
                 )
               })}
             </nav>
-            {/* Agents */}
-            <div className="px-5 py-4 border-t border-gray-100">
-              <p className="text-[10px] font-heading font-bold text-gray-400 uppercase tracking-wider mb-3">Active Agents</p>
-              <div className="flex flex-wrap gap-2">
-                {AGENT_COLORS.map((agent) => (
-                  <div key={agent.name} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gray-50 border border-gray-100">
-                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: agent.hex }} />
-                    <span className="text-[11px] font-heading font-medium" style={{ color: agent.hex }}>{agent.name}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
           </div>
         </>
       )}

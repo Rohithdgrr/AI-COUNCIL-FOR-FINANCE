@@ -1,3 +1,5 @@
+import { apiKeyManager } from './secureStorage'
+
 const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws'
 
 type EventHandler = (event: WSEvent) => void
@@ -19,14 +21,20 @@ class WebSocketClient {
   connect(apiKey?: string) {
     if (this.ws?.readyState === WebSocket.OPEN) return
 
-    const key = apiKey || localStorage.getItem('api_key') || 'dev-key'
-    const url = `${WS_URL}?api_key=${encodeURIComponent(key)}`
-
-    this.ws = new WebSocket(url)
+    // Use secure storage instead of localStorage
+    const key = apiKey || apiKeyManager.getApiKey()
+    
+    // Don't expose API key in URL - send it in first message instead
+    this.ws = new WebSocket(WS_URL)
 
     this.ws.onopen = () => {
       this.reconnectAttempts = 0
       console.log('[WS] Connected')
+      
+      // Send authentication message after connection
+      if (key) {
+        this.send({ type: 'auth', api_key: key })
+      }
     }
 
     this.ws.onclose = () => {

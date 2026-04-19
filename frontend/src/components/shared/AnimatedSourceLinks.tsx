@@ -57,6 +57,10 @@ const AnimatedSourceLinks = ({ isActive }: { isActive: boolean }) => {
       return;
     }
 
+    // Reset when sources change
+    setVisibleSources([]);
+    setCurrentIndex(0);
+
     // Start with first source if available
     const firstSource = sources[0];
     if (firstSource) {
@@ -66,7 +70,7 @@ const AnimatedSourceLinks = ({ isActive }: { isActive: boolean }) => {
 
     const interval = setInterval(addNextSource, INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [isActive, addNextSource]);
+  }, [isActive, sources, addNextSource]);
 
   return (
     <div className="relative overflow-hidden h-[60px] w-[280px]">

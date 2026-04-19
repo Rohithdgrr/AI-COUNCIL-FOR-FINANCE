@@ -8,8 +8,8 @@ export function useMarketTicker() {
       const { data } = await marketApi.ticker()
       return data
     },
-    refetchInterval: 60000, // Refresh every 60s
-    staleTime: 30000,
+    refetchInterval: 30000, // Refresh every 30s for real-time stock prices
+    staleTime: 15000,
   })
 }
 
@@ -32,8 +32,8 @@ export function useRiskDashboard() {
       const { data } = await marketApi.riskDashboard()
       return data
     },
-    refetchInterval: 300000, // Refresh every 5 min
-    staleTime: 120000,
+    refetchInterval: 120000, // Refresh every 2 min
+    staleTime: 60000,
   })
 }
 
