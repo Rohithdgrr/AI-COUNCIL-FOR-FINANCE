@@ -1,0 +1,44 @@
+services:
+  # Backend API Service
+  - type: web
+    name: supplychaingpt-backend
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python start_backend.py
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: PORT
+        value: 8000
+      - key: CORS_ORIGINS
+        value: https://supplychaingpt-frontend.onrender.com,http://localhost:3000,http://localhost:5173
+      - key: API_KEYS
+        generateValue: true
+      - key: MCP_API_KEY
+        generateValue: true
+      - key: RATE_LIMIT_PER_MINUTE
+        value: 60
+      - key: LOG_LEVEL
+        value: INFO
+      - key: HUMAN_IN_LOOP
+        value: false
+      - key: MAX_DEBATE_ROUNDS
+        value: 3
+      - key: CONFIDENCE_GAP_THRESHOLD
+        value: 20.0
+    # Auto-deploy from main branch
+    autoDeploy: true
+
+  # Frontend Static Site
+  - type: static
+    name: supplychaingpt-frontend
+    runtime: node
+    buildCommand: cd frontend && npm install && npm run build
+    publishDir: frontend/dist
+    envVars:
+      - key: NODE_VERSION
+        value: 20.11.0
+      - key: VITE_API_BASE_URL
+        value: https://supplychaingpt-backend.onrender.com/api
+    # Auto-deploy from main branch
+    autoDeploy: true
