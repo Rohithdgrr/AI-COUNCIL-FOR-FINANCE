@@ -39,6 +39,8 @@ from backend.routes.quota import router as quota_router
 from backend.routes.webhooks import router as webhooks_router
 from backend.routes.batch import router as batch_router
 from backend.ws.server import websocket_endpoint
+from backend.ws.dashboard_stream import run_dashboard_stream
+from backend.tasks import start_scheduler, stop_scheduler
 
 # Setup structured JSON logging
 setup_json_logging()
@@ -53,6 +55,15 @@ async def lifespan(app: FastAPI):
     global _start_time
     _start_time = time.time()
     logger.info("Starting SupplyChainGPT Council API...", extra={"session_id": "startup"})
+
+    dashboard_stream_task = asyncio.create_task(run_dashboard_stream())
+    
+    # Start background task scheduler for continuous data ingestion
+    try:
+        await start_scheduler()
+        logger.info("Background task scheduler started")
+    except Exception as e:
+        logger.warning(f"Failed to start task scheduler: {e}")
 
     try:
         from backend.db.neon import init_db
@@ -99,6 +110,21 @@ async def lifespan(app: FastAPI):
         logger.warning(f"Webhook system initialization failed: {e}")
 
     yield
+    
+    # Cleanup on shutdown
+    dashboard_stream_task.cancel()
+    try:
+        await dashboard_stream_task
+    except asyncio.CancelledError:
+        pass
+    
+    # Stop background task scheduler
+    try:
+        await stop_scheduler()
+        logger.info("Background task scheduler stopped")
+    except Exception as e:
+        logger.warning(f"Error stopping task scheduler: {e}")
+    
     logger.info("Shutting down SupplyChainGPT Council API...")
 
 
@@ -146,6 +172,14 @@ app.include_router(data_sources_router, tags=["Data Sources"])
 app.include_router(quota_router, tags=["Quota & Usage"])
 app.include_router(webhooks_router, tags=["Webhooks"])
 app.include_router(batch_router, prefix="/api/v1", tags=["Batch Operations"])
+
+# Task scheduler API
+from backend.routes.tasks import router as tasks_router
+app.include_router(tasks_router, tags=["Task Scheduler"])
+
+# Viewport optimization API
+from backend.routes.viewport import router as viewport_router
+app.include_router(viewport_router, tags=["Viewport Optimization"])
 
 # WebSocket
 app.websocket("/ws")(websocket_endpoint)

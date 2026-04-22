@@ -14,6 +14,7 @@ interface WSEvent {
 class WebSocketClient {
   private ws: WebSocket | null = null
   private handlers: Map<string, Set<EventHandler>> = new Map()
+  private pendingSubscriptions: Set<string> = new Set()
   private reconnectAttempts = 0
   private maxReconnectAttempts = 10
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
@@ -30,6 +31,10 @@ class WebSocketClient {
     this.ws.onopen = () => {
       this.reconnectAttempts = 0
       console.log('[WS] Connected')
+
+      this.pendingSubscriptions.forEach((topic) => {
+        this.send({ type: 'subscribe', topic })
+      })
       
       // Send authentication message after connection
       if (key) {
@@ -89,10 +94,12 @@ class WebSocketClient {
   }
 
   subscribe(topic: string) {
+    this.pendingSubscriptions.add(topic)
     this.send({ type: 'subscribe', topic })
   }
 
   unsubscribe(topic: string) {
+    this.pendingSubscriptions.delete(topic)
     this.send({ type: 'unsubscribe', topic })
   }
 

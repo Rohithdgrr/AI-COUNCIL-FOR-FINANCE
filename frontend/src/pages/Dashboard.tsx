@@ -10,6 +10,7 @@ import { CommodityPrices } from '@/components/dashboard/CommodityPrices'
 import { ForexRates } from '@/components/dashboard/ForexRates'
 import WorldRiskMap from '@/components/dashboard/WorldRiskMap'
 import GlobalTopNewsFeed from '@/components/dashboard/GlobalTopNewsFeed'
+import { useDashboardLiveStream } from '@/hooks/useDashboardLiveStream'
 
 type TabId = 'overview' | 'market' | 'risk' | 'supply' | 'system'
 
@@ -101,6 +102,7 @@ function EarthquakeAlert({ region }: { region: Record<string, unknown> }) {
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState<TabId>('overview')
+  useDashboardLiveStream()
   const ticker = useMarketTicker()
   const risk = useRiskDashboard()
   const suppliers = useSuppliers()

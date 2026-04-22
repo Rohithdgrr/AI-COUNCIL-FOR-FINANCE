@@ -14,6 +14,7 @@ class EventType(str, enum.Enum):
     COUNCIL_AGENT_DONE = "council_agent_done"
     COUNCIL_AGENT_ERROR = "council_agent_error"
     RISK_ALERT = "risk_alert"
+    DASHBOARD_SNAPSHOT = "dashboard_snapshot"
     RAG_INDEXED = "rag_indexed"
     MCP_TOOL_RESULT = "mcp_tool_result"
     SETTINGS_UPDATED = "settings_updated"
@@ -24,6 +25,7 @@ class EventType(str, enum.Enum):
 class Topic(str, enum.Enum):
     COUNCIL = "council"
     RISK = "risk"
+    DASHBOARD = "dashboard"
     RAG = "rag"
     MCP = "mcp"
     SETTINGS = "settings"
@@ -56,6 +58,15 @@ async def subscribe_topic(websocket, topic: Topic):
     from backend.ws.server import manager
     manager.subscribe(websocket, topic.value)
     await manager.send_to(websocket, build_event(EventType.HEARTBEAT, {"status": "subscribed", "topic": topic.value}))
+
+    if topic == Topic.DASHBOARD:
+        try:
+            from backend.ws.dashboard_stream import build_dashboard_snapshot
+
+            snapshot = await build_dashboard_snapshot()
+            await manager.send_to(websocket, build_event(EventType.DASHBOARD_SNAPSHOT, snapshot, session_id="dashboard-init"))
+        except Exception as exc:
+            logger.warning(f"Initial dashboard snapshot failed: {exc}")
 
 
 async def unsubscribe_topic(websocket, topic: Topic):
