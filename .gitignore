@@ -47,3 +47,8 @@ coverage.xml
 build/
 *.pyc
 *.tsbuildinfo
+
+# Submodule directories (not needed for deployment)
+firecrawl/
+firecrawl-simple/
+mirofish-clone/
