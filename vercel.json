@@ -6,6 +6,7 @@
   "framework": "vite",
   "rewrites": [
     { "source": "/api/:path*", "destination": "https://supplychaingpt-backend.onrender.com/:path*" },
+    { "source": "/ws/:path*", "destination": "https://supplychaingpt-backend.onrender.com/ws/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [
