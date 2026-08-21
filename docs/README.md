@@ -6,6 +6,14 @@
 
 Instead of a single AI giving one answer, the Council runs multiple specialized agents in parallel, each arguing their perspective, and a Moderator Agent synthesizes the final, balanced decision. This is powered by LangGraph multi-agent orchestration, where agents have memory, tools, and the ability to challenge each other's outputs before giving a final recommendation.
 
+### Live Links
+
+| Service | URL |
+|---------|-----|
+| **Frontend** | https://ai-council-for-finance.vercel.app |
+| **Backend API** | https://supplychaingpt-backend.onrender.com |
+| **Backend Docs** | https://supplychaingpt-backend.onrender.com/docs |
+
 **Hackathon**: Cognizant Technoverse 2026  
 **Team**: Rohith, Akhil, Poojitha, Aishwarya  
 **Timeline**: 9 Days (April 12–20, 2026)
@@ -880,19 +888,33 @@ npm run build
 
 ## Deployment
 
-### Docker / Compose
-Run services: API, Web, Postgres, Neo4j, Redis  
-Optional: add a worker container for async jobs
+### Production — Vercel (Frontend) + Render (Backend)
 
-```bash
-docker compose -f infra/docker-compose.yml up -d --build
+```
+GitHub push to main
+    ├─→ Vercel  — builds frontend/ (Vite → dist)  — https://ai-council-for-finance.vercel.app
+    └─→ Render  — builds backend/ (Python)         — https://supplychaingpt-backend.onrender.com
 ```
 
-### Kubernetes (optional)
-Use `infra/k8s/` manifests for a multi-service deployment.  
-Recommended: separate namespaces for dev/stage/prod.
+**Frontend (Vercel)**:
+- Root Directory: `frontend`
+- Build Command: `npm run build`
+- Output Directory: `dist`
+- `frontend/vercel.json` handles API proxy rewrites to backend
 
-### AWS
+**Backend (Render)**:
+- Reads `render.yaml` from repo root
+- Health check: `GET /health`
+- CORS locked to `https://ai-council-for-finance.vercel.app`
+
+### Docker / Compose (Local)
+
+```bash
+docker compose up -d --build
+```
+
+### AWS (Optional)
+
 ECS/Fargate deployment with environment variable injection.
 
 ---
