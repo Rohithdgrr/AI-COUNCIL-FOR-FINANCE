@@ -86,8 +86,8 @@ services:
         sync: false
       - key: SHODAN_API_KEY
         sync: false
-      # Auth (auto-generated on first deploy — copy to Vercel if needed)
+      # Auth — use dev-key for demo so frontend works without extra env setup
       - key: API_KEYS
-        generateValue: true
+        value: dev-key
       - key: MCP_API_KEY
-        generateValue: true
+        value: dev-mcp-key
