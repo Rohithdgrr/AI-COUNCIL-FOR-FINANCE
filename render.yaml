@@ -18,10 +18,9 @@ services:
         value: 3.11.0
       - key: PORT
         value: 8000
-      # CORS — allow Vercel frontend (update with your actual Vercel URL after first deploy)
-      # Use "*" for initial deploy to allow any Vercel preview URL; lock down to specific domain later
+      # CORS — allow Vercel frontend
       - key: CORS_ORIGINS
-        value: "*"
+        value: "https://ai-council-for-finance.vercel.app,http://localhost:3000,http://localhost:5173,http://localhost:8000"
       # App config
       - key: LOG_LEVEL
         value: INFO
