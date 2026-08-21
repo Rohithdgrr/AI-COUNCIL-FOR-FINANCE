@@ -513,7 +513,12 @@ class DebateEngine:
             json_match = re.search(r'\{[\s\S]*\}', content)
             if json_match:
                 parsed = json.loads(json_match.group())
-                return parsed.get("disagreements", []), parsed.get("consensus", [])
+                disagreements = parsed.get("disagreements", [])
+                consensus = parsed.get("consensus", [])
+                # Coerce to strings (LLM may return dicts)
+                disagreements = [json.dumps(d) if isinstance(d, dict) else str(d) for d in disagreements]
+                consensus = [json.dumps(c) if isinstance(c, dict) else str(c) for c in consensus]
+                return disagreements, consensus
             # No JSON found — fall through to heuristic
         except Exception as e:
             logger.warning(f"Position extraction LLM call failed: {e}")
@@ -546,7 +551,11 @@ class DebateEngine:
             json_match = re.search(r'\{[\s\S]*\}', response.content)
             if json_match:
                 parsed = json.loads(json_match.group())
-                return parsed.get("disagreements", [])[:5], parsed.get("consensus", [])[:5]
+                disagreements = parsed.get("disagreements", [])[:5]
+                consensus = parsed.get("consensus", [])[:5]
+                disagreements = [json.dumps(d) if isinstance(d, dict) else str(d) for d in disagreements]
+                consensus = [json.dumps(c) if isinstance(c, dict) else str(c) for c in consensus]
+                return disagreements, consensus
         except Exception as e:
             logger.warning(f"Challenge position extraction failed: {e}")
 

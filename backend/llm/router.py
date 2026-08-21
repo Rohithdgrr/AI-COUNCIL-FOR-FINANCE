@@ -9,27 +9,29 @@ from backend.llm.providers import (
     get_google_client,
     get_cohere_client,
     get_sambanova_client,
+    get_mistral_client,
 )
 
 logger = logging.getLogger(__name__)
 
 PROVIDER_FACTORIES = {
     "groq": lambda model="llama-3.3-70b-versatile", streaming=False: get_groq_client(model, streaming),
-    "openrouter": lambda model="meta-llama/llama-3.3-70b-instruct:free", streaming=False: get_openrouter_client(model, streaming),
+    "openrouter": lambda model="openai/gpt-oss-20b:free", streaming=False: get_openrouter_client(model, streaming),
+    "mistral": lambda model="mistral-large-latest", streaming=False: get_mistral_client(model, streaming),
     "nvidia": lambda model="meta/llama-3.1-8b-instruct", streaming=False: get_nvidia_client(model, streaming),
-    "google": lambda model="gemini-2.0-flash", streaming=False: get_google_client(model, streaming),
+    "google": lambda model="gemini-flash-latest", streaming=False: get_google_client(model, streaming),
     "cohere": lambda model="command-r-plus", streaming=False: get_cohere_client(model, streaming),
     "sambanova": lambda model="Meta-Llama-3.3-70B-Instruct", streaming=False: get_sambanova_client(model, streaming),
 }
 
 ROUTING = {
-    "risk":      {"primary": "nvidia:meta/llama-3.1-8b-instruct", "fallback": ["groq:llama-3.3-70b-versatile", "openrouter:meta-llama/llama-3.3-70b-instruct:free"]},
-    "supply":    {"primary": "nvidia:meta/llama-3.1-8b-instruct", "fallback": ["groq:llama-3.3-70b-versatile", "openrouter:meta-llama/llama-3.3-70b-instruct:free"]},
-    "logistics": {"primary": "nvidia:meta/llama-3.1-8b-instruct", "fallback": ["groq:llama-3.3-70b-versatile", "openrouter:meta-llama/llama-3.3-70b-instruct:free"]},
-    "market":    {"primary": "nvidia:meta/llama-3.1-8b-instruct", "fallback": ["groq:llama-3.3-70b-versatile", "openrouter:meta-llama/llama-3.3-70b-instruct:free"]},
-    "finance":   {"primary": "nvidia:meta/llama-3.1-8b-instruct", "fallback": ["groq:llama-3.3-70b-versatile", "openrouter:meta-llama/llama-3.3-70b-instruct:free"]},
-    "brand":     {"primary": "nvidia:meta/llama-3.1-8b-instruct", "fallback": ["groq:llama-3.3-70b-versatile", "openrouter:meta-llama/llama-3.3-70b-instruct:free"]},
-    "moderator": {"primary": "nvidia:meta/llama-3.1-8b-instruct", "fallback": ["groq:llama-3.3-70b-versatile", "openrouter:meta-llama/llama-3.3-70b-instruct:free"]},
+    "risk":      {"primary": "nvidia:meta/llama-3.1-8b-instruct", "fallback": ["openrouter:openai/gpt-oss-20b:free", "mistral:mistral-large-latest", "google:gemini-flash-latest"]},
+    "supply":    {"primary": "nvidia:meta/llama-3.1-8b-instruct", "fallback": ["openrouter:openai/gpt-oss-20b:free", "mistral:mistral-large-latest", "google:gemini-flash-latest"]},
+    "logistics": {"primary": "nvidia:meta/llama-3.1-8b-instruct", "fallback": ["openrouter:openai/gpt-oss-20b:free", "mistral:mistral-large-latest", "google:gemini-flash-latest"]},
+    "market":    {"primary": "nvidia:meta/llama-3.1-8b-instruct", "fallback": ["openrouter:openai/gpt-oss-20b:free", "mistral:mistral-large-latest", "google:gemini-flash-latest"]},
+    "finance":   {"primary": "nvidia:meta/llama-3.1-8b-instruct", "fallback": ["openrouter:openai/gpt-oss-20b:free", "mistral:mistral-large-latest", "google:gemini-flash-latest"]},
+    "brand":     {"primary": "nvidia:meta/llama-3.1-8b-instruct", "fallback": ["openrouter:openai/gpt-oss-20b:free", "mistral:mistral-large-latest", "google:gemini-flash-latest"]},
+    "moderator": {"primary": "nvidia:meta/llama-3.1-8b-instruct", "fallback": ["openrouter:openai/gpt-oss-20b:free", "mistral:mistral-large-latest", "google:gemini-flash-latest"]},
 }
 
 

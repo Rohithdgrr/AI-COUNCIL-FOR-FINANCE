@@ -309,7 +309,7 @@ Each agent generates **30/60/90-day predictions** using ensemble ML models:
 - **State Management**: LangGraph Checkpointer (PostgreSQL + Redis)
 - **Observability**: LangSmith (tracing, cost, latency, debug)
 - **Database**: PostgreSQL 16 (state persistence) + Redis 7 (cache) + Neo4j 5 (graph) + ChromaDB (vectors)
-- **LLM**: Groq (Llama-3.3-70B-fast) / Anthropic Claude via AWS Bedrock / Gemini (extract)
+- **LLM**: NVIDIA NIM `meta/llama-3.1-8b-instruct` (primary) → OpenRouter `openai/gpt-oss-20b:free` → Mistral `mistral-large-latest` → Google `gemini-flash-latest` (fallback chain); also Groq, Cohere, SambaNova via same router (`backend/llm/router.py:27`)
 - **MCP Tools**: 99 tools across 27+ live APIs (Finnhub, Polygon, Alpha Vantage, NOAA, NVD, etc.)
 - **Web Scraping**: Firecrawl (self-hosted, unlimited) — 6 tools: scrape, crawl, search, extract, supplier, news
 - **RAG**: LangChain + ChromaDB + Neo4j Graph RAG + Firecrawl URL loader
@@ -1003,6 +1003,20 @@ REDIS_URL=redis://...
 - **April 21–22**: Buffer / dry-run for Agent Builder Challenge
 - **April 23 (Agent Builder Challenge)**: Submit / demo the working Council (use your Day 9 deployment)
 - **May 6 (Pune 24-hour MVP Hackathon)**: Arrive with 90%+ ready code → focus on minor tweaks, live AWS deployment, and stunning presentation
+
+---
+
+## Changelog — Aug 2026 Fixes
+
+- **2026-08-21 — LLM Streaming Fix**: Fixed `All LLM streaming providers failed for agent supply`.
+  - `backend/llm/router.py:27` — Routing now NVIDIA primary (`meta/llama-3.1-8b-instruct`) → OpenRouter `openai/gpt-oss-20b:free` → Mistral `mistral-large-latest` → Google `gemini-flash-latest`; previous OpenRouter `meta-llama/llama-3.3-70b-instruct:free` (404) and Google `gemini-2.0-flash` (deprecated) replaced.
+  - `backend/llm/providers.py:29,45` — Google default `gemini-flash-latest`, added `get_mistral_client` via `https://api.mistral.ai/v1`.
+  - `.env.example` — Added `MISTRAL_API_KEY`, `GOOGLE_API_KEY` placeholders; `NVIDIA_API_KEY` now required for primary.
+- **2026-08-21 — Graph / Debate Fixes**:
+  - `backend/graph.py:1,227,537` — Fan-out now uses `langgraph.constants.Send` (fixed `unhashable type: 'dict'`), renamed node `predictions` → `predictions_step` (fixed `"'predictions' is already being used as a state key"`).
+  - `backend/debate_engine.py:513,551` — Coerce LLM-extracted `disagreements/consensus` dicts to JSON strings (fixed `DebateRound` validation).
+  - `backend/graph.py:254,269` — Neo4j password now `testpassword` to match `docker-compose.yml`.
+- **2026-08-21 — Requirements**: Relaxed pins to `>=` with `<0.4` caps for LangChain/LangGraph (`requirements.txt`) to avoid `langchain-cohere` / `strawberry-graphql` conflicts.
 
 ---
 

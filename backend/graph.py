@@ -1,4 +1,5 @@
 from langgraph.graph import StateGraph, END
+from langgraph.constants import Send
 from backend.state import CouncilState
 from backend.agents.moderator import moderator_parse, moderator_synthesize
 from backend.agents.risk_agent import risk_agent
@@ -224,15 +225,15 @@ def _agent_should_run(agent_name: str, state: CouncilState) -> bool:
     return agent_name in active_agents
 
 
-def _agent_fanout(state: CouncilState) -> dict[str, str]:
+def _agent_fanout(state: CouncilState):
     """Single routing function for all agents — eliminates race condition from multiple conditional edges."""
     AGENT_NAMES = ["risk", "supply", "logistics", "market", "finance", "brand"]
-    targets = {}
+    targets = []
     for name in AGENT_NAMES:
         if _agent_should_run(name, state):
-            targets[name] = name
+            targets.append(Send(name, state))
     if not targets:
-        targets["predictions"] = "predictions"
+        targets.append(Send("predictions_step", state))
     return targets
 
 
@@ -251,7 +252,7 @@ def build_council_graph() -> StateGraph:
     graph.add_node("market", market_agent)
     graph.add_node("finance", finance_agent)
     graph.add_node("brand", brand_agent)
-    graph.add_node("predictions", predictions_node)
+    graph.add_node("predictions_step", predictions_node)
     graph.add_node("debate", debate_node)
     graph.add_node("fallback", fallback_node)
     graph.add_node("brand_enhancement", brand_enhancement_node)
@@ -267,14 +268,14 @@ def build_council_graph() -> StateGraph:
 
     # Single conditional edge for all agents — returns dict of all agents that should run
     graph.add_conditional_edges("astra_parallel", _agent_fanout, [
-        "risk", "supply", "logistics", "market", "finance", "brand", "predictions"
+        "risk", "supply", "logistics", "market", "finance", "brand", "predictions_step"
     ])
 
     # Phase 2: All agents converge to predictions node
     for agent in ["risk", "supply", "logistics", "market", "finance", "brand"]:
-        graph.add_edge(agent, "predictions")
+        graph.add_edge(agent, "predictions_step")
 
-    graph.add_edge("predictions", "debate")
+    graph.add_edge("predictions_step", "debate")
     graph.add_edge("debate", "fallback")
 
     # Phase 3: Conditional brand enhancement
@@ -534,17 +535,17 @@ async def primary_synthesis_node(state: CouncilState) -> dict:
 # ---------------------------------------------------------------------------
 # Lite Mode: Conditional edge — which agents should run in lite mode
 # ---------------------------------------------------------------------------
-def _lite_agent_fanout(state: CouncilState) -> dict[str, str]:
+def _lite_agent_fanout(state: CouncilState):
     """Fan-out for lite mode: primary agent + 5 support agents."""
     ctx = state.get("context") or {}
     primary_agent = state.get("primary_agent") or ctx.get("primary_agent", "risk")
     active_agents = ctx.get("active_agents") or AGENT_KEYS
-    targets = {}
+    targets = []
     for name in active_agents:
         if name in AGENT_KEYS:
-            targets[name] = name
+            targets.append(Send(name, state))
     if not targets:
-        targets["risk"] = "risk"
+        targets.append(Send("risk", state))
     return targets
 
 
