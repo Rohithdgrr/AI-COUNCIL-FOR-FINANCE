@@ -26,7 +26,8 @@ export function useCouncilV2Stream() {
 
     try {
       const apiKey = localStorage.getItem('api_key') || 'dev-key'
-      const response = await fetch('/api/council/v2/stream', {
+      const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL || '/api'
+      const response = await fetch(`${API_BASE}/council/v2/stream`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
