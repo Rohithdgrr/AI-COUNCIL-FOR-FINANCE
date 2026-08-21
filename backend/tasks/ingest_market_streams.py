@@ -199,37 +199,39 @@ class PolygonStreamTask(BackgroundTask):
         }
     
     async def _fetch_last_quote(self, symbol: str) -> Optional[StreamAdapter]:
-        """Fetch last quote for a symbol."""
+        """Fetch last quote for a symbol — uses free-tier compatible endpoint."""
         try:
             async with httpx.AsyncClient(timeout=5) as client:
+                # Free tier: use /v2/aggs/ticker/{symbol}/prev (previous close) instead of /v1/last/quote
+                # Paid endpoint /v1/last/quote requires Stocks Starter+ and returns 404 on free tier
                 response = await client.get(
-                    f"https://api.polygon.io/v1/last/quote/stocks/{symbol}",
-                    params={"apikey": self.api_key}
+                    f"https://api.polygon.io/v2/aggs/ticker/{symbol}/prev",
+                    params={"adjusted": "true", "apikey": self.api_key}
                 )
                 response.raise_for_status()
             
             data = response.json()
-            quote = data.get("results", {})
-            
-            if not quote or "last_quote" not in quote:
+            results = data.get("results", [])
+            if not results:
                 return None
             
-            lq = quote["last_quote"]
+            bar = results[0]  # {o: open, h: high, l: low, c: close, v: volume, t: timestamp}
             
             return StreamAdapter(
                 symbol=symbol,
-                price=(lq.get("bid", 0) + lq.get("ask", 0)) / 2 if lq.get("bid") else 0,
-                change=0,  # Polygon doesn't provide daily change in this endpoint
-                change_percent=0,
-                bid=lq.get("bid", None),
-                ask=lq.get("ask", None),
-                volume=quote.get("volume", None),
-                timestamp=datetime.fromtimestamp(quote.get("last_updated", 0) / 1000),
+                price=float(bar.get("c", 0)),
+                change=float(bar.get("c", 0)) - float(bar.get("o", 0)),
+                change_percent=((float(bar.get("c", 0)) - float(bar.get("o", 0))) / float(bar.get("o", 1)) * 100) if bar.get("o") else 0,
+                bid=None,
+                ask=None,
+                volume=int(bar.get("v", 0)) if bar.get("v") else None,
+                timestamp=datetime.fromtimestamp(bar.get("t", 0) / 1000),
                 source="polygon",
             )
         
         except Exception as e:
-            logger.warning(f"Failed to fetch {symbol} from Polygon: {e}")
+            # Downgrade to debug to reduce log noise on free tier rate limits
+            logger.debug(f"Failed to fetch {symbol} from Polygon: {e}")
             return None
 
 
