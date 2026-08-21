@@ -3,7 +3,7 @@
 import logging
 from typing import List
 
-from backend.mirofish.schemas import Persona, SimulationRound
+from backend.astra.schemas import Persona, SimulationRound
 
 logger = logging.getLogger(__name__)
 

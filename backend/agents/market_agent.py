@@ -199,7 +199,7 @@ async def run_market_simulation(
     Returns:
         Simulation result with prediction, confidence, and recommendations
     """
-    from backend.mirofish.simulation_engine import SimulationEngine
+    from backend.astra.simulation_engine import SimulationEngine
 
     engine = SimulationEngine()
     state = await engine.run_quick_simulation(

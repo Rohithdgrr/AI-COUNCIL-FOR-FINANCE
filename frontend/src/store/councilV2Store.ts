@@ -409,6 +409,7 @@ export const useCouncilV2Store = create<CouncilV2State>((set) => ({
       }
 
       case 'mirofish_start':
+      case 'astra_start':
         set({
           mirofishPhase: 'graph_building',
           mirofishBrandResult: null,
@@ -422,11 +423,12 @@ export const useCouncilV2Store = create<CouncilV2State>((set) => ({
         })
         break
 
-      case 'mirofish_agent_progress': {
-        const mfAgent = event.agent
-        const mfPhase = event.phase
-        const mfEntities = event.entities
-        const mfPersonas = event.personas
+      case 'mirofish_agent_progress':
+      case 'astra_agent_progress': {
+        const mfAgent = (event as any).agent
+        const mfPhase = (event as any).phase
+        const mfEntities = (event as any).entities
+        const mfPersonas = (event as any).personas
 
         const updates: Partial<CouncilV2State> = {}
         if (mfAgent === 'brand') {
@@ -456,9 +458,10 @@ export const useCouncilV2Store = create<CouncilV2State>((set) => ({
         break
       }
 
-      case 'mirofish_agent_complete': {
-        const mfAgent = event.agent
-        const mfResult = event.result
+      case 'mirofish_agent_complete':
+      case 'astra_agent_complete': {
+        const mfAgent = (event as any).agent
+        const mfResult = (event as any).result
         if (mfAgent === 'brand' && mfResult) {
           set({ mirofishBrandResult: mfResult, mirofishBrandPhase: 'completed' })
         } else if (mfAgent === 'market' && mfResult) {
@@ -467,8 +470,9 @@ export const useCouncilV2Store = create<CouncilV2State>((set) => ({
         break
       }
 
-      case 'mirofish_agent_error': {
-        const mfAgent = event.agent
+      case 'mirofish_agent_error':
+      case 'astra_agent_error': {
+        const mfAgent = (event as any).agent
         if (mfAgent === 'brand') {
           set({ mirofishBrandPhase: 'failed' })
         } else if (mfAgent === 'market') {
@@ -478,6 +482,7 @@ export const useCouncilV2Store = create<CouncilV2State>((set) => ({
       }
 
       case 'mirofish_complete':
+      case 'astra_complete':
         set({ mirofishPhase: 'completed' })
         break
 

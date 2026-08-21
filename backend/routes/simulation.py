@@ -56,7 +56,7 @@ _simulation_store: dict[str, dict] = {}
 async def run_simulation(request: SimulationRunRequest):
     """Run a MiroFish simulation. Streams progress via SSE if stream=True."""
 
-    from backend.mirofish.simulation_engine import SimulationEngine
+    from backend.astra.simulation_engine import SimulationEngine
 
     sim_id = uuid.uuid4().hex[:12]
 
@@ -69,7 +69,7 @@ async def run_simulation(request: SimulationRunRequest):
             # Phase 1: Build graph
             yield f"data: {json.dumps({'type': 'sim_progress', 'phase': 'graph_building', 'simulation_id': sim_id})}\n\n"
 
-            from backend.mirofish.graph_builder import GraphBuilder
+            from backend.astra.graph_builder import GraphBuilder
             graph_builder = GraphBuilder()
             entities, relationships = await graph_builder.build_graph(request.query, fast_mode=True)
             entity_names = [e.name for e in entities]
@@ -79,8 +79,8 @@ async def run_simulation(request: SimulationRunRequest):
             # Phase 2: Generate personas
             yield f"data: {json.dumps({'type': 'sim_progress', 'phase': 'persona_generation', 'simulation_id': sim_id})}\n\n"
 
-            from backend.mirofish.persona_generator import PersonaGenerator
-            from backend.mirofish.schemas import SimulationConfig, SimulationState
+            from backend.astra.persona_generator import PersonaGenerator
+            from backend.astra.schemas import SimulationConfig, SimulationState
 
             config = SimulationConfig(
                 name=f"{request.agent_type}_sim_{sim_id}",
@@ -123,7 +123,7 @@ async def run_simulation(request: SimulationRunRequest):
             # Phase 4: Generate report
             yield f"data: {json.dumps({'type': 'sim_progress', 'phase': 'report_generation', 'simulation_id': sim_id})}\n\n"
 
-            from backend.mirofish.report_agent import ReportAgent
+            from backend.astra.report_agent import ReportAgent
             report_agent = ReportAgent()
             report = await report_agent.generate_report(state, report_type="full")
 
@@ -168,8 +168,8 @@ async def chat_simulation(request: SimulationChatRequest):
     if not sim_data:
         return {"error": f"Simulation {request.simulation_id} not found"}
 
-    from backend.mirofish.schemas import SimulationState
-    from backend.mirofish.report_agent import ReportAgent
+    from backend.astra.schemas import SimulationState
+    from backend.astra.report_agent import ReportAgent
 
     state = SimulationState(**sim_data["state"])
     report_agent = ReportAgent()
@@ -221,10 +221,10 @@ async def run_swarm_simulation(request: SwarmSimulateRequest):
 
     async def _run_agent(agent_type: str, queue: asyncio.Queue):
         """Run MiroFish simulation for a single agent, pushing SSE events to queue in real-time."""
-        from backend.mirofish.simulation_engine import SimulationEngine
-        from backend.mirofish.graph_builder import GraphBuilder
-        from backend.mirofish.persona_generator import PersonaGenerator
-        from backend.mirofish.schemas import SimulationConfig, SimulationState
+        from backend.astra.simulation_engine import SimulationEngine
+        from backend.astra.graph_builder import GraphBuilder
+        from backend.astra.persona_generator import PersonaGenerator
+        from backend.astra.schemas import SimulationConfig, SimulationState
 
         sim_id = f"{agent_type}_sim_{uuid.uuid4().hex[:8]}"
 
@@ -271,7 +271,7 @@ async def run_swarm_simulation(request: SwarmSimulateRequest):
 
             # Phase 4: Report
             _emit({'type': 'mirofish_agent_progress', 'agent': agent_type, 'phase': 'report_generation', 'simulation_id': sim_id})
-            from backend.mirofish.report_agent import ReportAgent
+            from backend.astra.report_agent import ReportAgent
             report_agent = ReportAgent()
             report = await report_agent.generate_report(state, report_type="full")
 

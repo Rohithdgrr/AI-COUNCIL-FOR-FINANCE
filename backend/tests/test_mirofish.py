@@ -4,12 +4,12 @@ import pytest
 import asyncio
 from unittest.mock import AsyncMock, patch, MagicMock
 
-from backend.mirofish.schemas import (
+from backend.astra.schemas import (
     Entity, EntityType, Relationship, RelationshipType,
     Persona, PersonaRole, SimulationConfig, SimulationState,
     SimulationRound, SimulationResult,
 )
-from backend.mirofish.memory_manager import MemoryManager
+from backend.astra.memory_manager import MemoryManager
 
 
 # ── Schema Tests ────────────────────────────────────────────────────────────────
@@ -146,7 +146,7 @@ class TestMemoryManager:
 class TestGraphBuilder:
     @pytest.mark.asyncio
     async def test_pattern_extraction(self):
-        from backend.mirofish.graph_builder import GraphBuilder
+        from backend.astra.graph_builder import GraphBuilder
         gb = GraphBuilder()
 
         # Test regex-based entity extraction (no LLM needed)
@@ -157,7 +157,7 @@ class TestGraphBuilder:
 
     @pytest.mark.asyncio
     async def test_merge_entities_dedup(self):
-        from backend.mirofish.graph_builder import GraphBuilder
+        from backend.astra.graph_builder import GraphBuilder
         gb = GraphBuilder()
 
         e1 = Entity(id="a", name="Apple", type=EntityType.COMPANY, importance=0.8)
@@ -174,7 +174,7 @@ class TestGraphBuilder:
 class TestPersonaGenerator:
     @pytest.mark.asyncio
     async def test_score_entities(self):
-        from backend.mirofish.persona_generator import PersonaGenerator
+        from backend.astra.persona_generator import PersonaGenerator
         pg = PersonaGenerator()
 
         entities = [
@@ -193,7 +193,7 @@ class TestPersonaGenerator:
 
     @pytest.mark.asyncio
     async def test_always_includes_analyst_and_customer(self):
-        from backend.mirofish.persona_generator import PersonaGenerator
+        from backend.astra.persona_generator import PersonaGenerator
         pg = PersonaGenerator()
 
         # Minimal entities that won't naturally produce analyst/customer
@@ -217,7 +217,7 @@ class TestPersonaGenerator:
 class TestSimulationEngine:
     @pytest.mark.asyncio
     async def test_run_simulation_basic(self):
-        from backend.mirofish.simulation_engine import SimulationEngine
+        from backend.astra.simulation_engine import SimulationEngine
 
         engine = SimulationEngine()
         config = SimulationConfig(name="test", seed_query="What if prices rise?", rounds=1, num_personas=2)
@@ -247,7 +247,7 @@ class TestSimulationEngine:
 
     @pytest.mark.asyncio
     async def test_simulation_failure_handling(self):
-        from backend.mirofish.simulation_engine import SimulationEngine
+        from backend.astra.simulation_engine import SimulationEngine
 
         engine = SimulationEngine()
         config = SimulationConfig(name="test", seed_query="test", rounds=1)
@@ -293,7 +293,7 @@ class TestReviewSwarm:
 class TestReportAgent:
     @pytest.mark.asyncio
     async def test_summary_report(self):
-        from backend.mirofish.report_agent import ReportAgent
+        from backend.astra.report_agent import ReportAgent
 
         agent = ReportAgent()
         state = SimulationState(
@@ -309,7 +309,7 @@ class TestReportAgent:
 
     @pytest.mark.asyncio
     async def test_report_no_results(self):
-        from backend.mirofish.report_agent import ReportAgent
+        from backend.astra.report_agent import ReportAgent
 
         agent = ReportAgent()
         state = SimulationState(

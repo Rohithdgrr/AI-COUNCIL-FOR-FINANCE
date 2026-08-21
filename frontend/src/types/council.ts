@@ -63,7 +63,7 @@ export interface SupervisorResult {
 }
 
 export interface CouncilV2StreamEvent {
-  type: 'start' | 'round_start' | 'agent_start' | 'token' | 'agent_done' | 'agent_error' | 'moderator_start' | 'moderator_done' | 'supervisor_done' | 'complete' | 'pipeline_stage' | 'citations_ready' | 'citations_map' | 'source_discovered' | 'support_evidence' | 'evidence_bundle' | 'subagent_start' | 'subagent_evidence' | 'mirofish_start' | 'mirofish_agent_progress' | 'mirofish_agent_complete' | 'mirofish_agent_error' | 'mirofish_complete'
+  type: 'start' | 'round_start' | 'agent_start' | 'token' | 'agent_done' | 'agent_error' | 'moderator_start' | 'moderator_done' | 'supervisor_done' | 'complete' | 'pipeline_stage' | 'citations_ready' | 'citations_map' | 'source_discovered' | 'support_evidence' | 'evidence_bundle' | 'subagent_start' | 'subagent_evidence' | 'mirofish_start' | 'mirofish_agent_progress' | 'mirofish_agent_complete' | 'mirofish_agent_error' | 'mirofish_complete' | 'astra_start' | 'astra_agent_progress' | 'astra_agent_complete' | 'astra_agent_error' | 'astra_complete' | 'astra_results'
   session_id?: string
   query?: string
   lite_mode?: boolean

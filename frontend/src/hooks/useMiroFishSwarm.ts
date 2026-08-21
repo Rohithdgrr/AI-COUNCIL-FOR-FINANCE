@@ -23,7 +23,7 @@ export function useMiroFishSwarm() {
 
     try {
       const apiKey = localStorage.getItem('api_key') || 'dev-key'
-      const response = await fetch('/api/simulation/swarm', {
+      const response = await fetch('/api/astra/swarm', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

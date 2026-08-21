@@ -4,7 +4,7 @@ import pytest
 import json
 from unittest.mock import AsyncMock, patch, MagicMock
 
-from backend.mirofish.schemas import (
+from backend.astra.schemas import (
     SimulationConfig, SimulationResult, SimulationState,
     ScenarioDetail, SourceReference, Entity, EntityType,
     Persona, PersonaRole, Relationship, RelationshipType,
@@ -127,7 +127,7 @@ class TestPersonaGeneratorEnhanced:
         return SimulationConfig(name="test", seed_query="Will Apple recover?", num_personas=50)
 
     def test_distribute_roles_evenly(self, mock_entities):
-        from backend.mirofish.persona_generator import PersonaGenerator
+        from backend.astra.persona_generator import PersonaGenerator
         pg = PersonaGenerator()
         distribution = pg._distribute_roles(50, list(PersonaRole), mock_entities)
         assert len(distribution) == 50
@@ -136,7 +136,7 @@ class TestPersonaGeneratorEnhanced:
         assert len(roles_in_dist) == 8
 
     def test_distribute_roles_small_count(self, mock_entities):
-        from backend.mirofish.persona_generator import PersonaGenerator
+        from backend.astra.persona_generator import PersonaGenerator
         pg = PersonaGenerator()
         distribution = pg._distribute_roles(8, list(PersonaRole), mock_entities)
         assert len(distribution) == 8
@@ -144,7 +144,7 @@ class TestPersonaGeneratorEnhanced:
         assert set(distribution) == set(PersonaRole)
 
     def test_create_fallback_persona(self, config_50):
-        from backend.mirofish.persona_generator import PersonaGenerator
+        from backend.astra.persona_generator import PersonaGenerator
         pg = PersonaGenerator()
         for role in PersonaRole:
             persona = pg._create_fallback_persona(role, config_50)
@@ -155,7 +155,7 @@ class TestPersonaGeneratorEnhanced:
     @pytest.mark.asyncio
     async def test_batch_generate_personas_fallback(self, mock_entities, mock_relationships, config_50):
         """Test that batch generation falls back to fallback personas when LLM fails."""
-        from backend.mirofish.persona_generator import PersonaGenerator
+        from backend.astra.persona_generator import PersonaGenerator
         pg = PersonaGenerator()
 
         with patch.object(pg, '_batch_generate_personas', new_callable=AsyncMock) as mock_batch:
@@ -214,7 +214,7 @@ class TestReportAgentEnhanced:
         )
 
     def test_extract_sources(self, mock_state):
-        from backend.mirofish.report_agent import ReportAgent
+        from backend.astra.report_agent import ReportAgent
         ra = ReportAgent()
         sources = ra._extract_sources(mock_state)
         assert len(sources) >= 1
@@ -223,14 +223,14 @@ class TestReportAgentEnhanced:
         assert "API Data" in titles
 
     def test_extract_sources_deduplicates(self, mock_state):
-        from backend.mirofish.report_agent import ReportAgent
+        from backend.astra.report_agent import ReportAgent
         ra = ReportAgent()
         sources = ra._extract_sources(mock_state)
         titles = [s["title"] for s in sources]
         assert len(titles) == len(set(titles))  # no duplicates
 
     def test_describe_methodology(self, mock_state):
-        from backend.mirofish.report_agent import ReportAgent
+        from backend.astra.report_agent import ReportAgent
         ra = ReportAgent()
         methodology = ra._describe_methodology(mock_state)
         assert "personas" in methodology
@@ -239,7 +239,7 @@ class TestReportAgentEnhanced:
 
     @pytest.mark.asyncio
     async def test_full_report_includes_new_fields(self, mock_state):
-        from backend.mirofish.report_agent import ReportAgent
+        from backend.astra.report_agent import ReportAgent
         ra = ReportAgent()
 
         with patch.object(ra, '_generate_explanation_and_scenarios', new_callable=AsyncMock) as mock_combined:
@@ -264,7 +264,7 @@ class TestReportAgentEnhanced:
 
 class TestGraphBuilderEnhanced:
     def test_merge_entities_deduplicates(self):
-        from backend.mirofish.graph_builder import GraphBuilder
+        from backend.astra.graph_builder import GraphBuilder
         gb = GraphBuilder()
         e1 = Entity(id="a", name="Apple Inc", type=EntityType.COMPANY, importance=0.8)
         e2 = Entity(id="b", name="apple inc", type=EntityType.COMPANY, importance=0.6)
@@ -273,7 +273,7 @@ class TestGraphBuilderEnhanced:
         assert merged[0].importance > 0.8  # boosted
 
     def test_merge_entities_keeps_both_different(self):
-        from backend.mirofish.graph_builder import GraphBuilder
+        from backend.astra.graph_builder import GraphBuilder
         gb = GraphBuilder()
         e1 = Entity(id="a", name="Apple Inc", type=EntityType.COMPANY, importance=0.8)
         e2 = Entity(id="b", name="Google LLC", type=EntityType.COMPANY, importance=0.7)
@@ -281,7 +281,7 @@ class TestGraphBuilderEnhanced:
         assert len(merged) == 2
 
     def test_pattern_extraction(self):
-        from backend.mirofish.graph_builder import GraphBuilder
+        from backend.astra.graph_builder import GraphBuilder
         gb = GraphBuilder()
         entities = gb._extract_entities_patterns("Apple Inc announced a new semiconductor market supply chain disruption")
         names = [e.name for e in entities]

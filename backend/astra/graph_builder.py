@@ -6,7 +6,7 @@ import re
 from typing import List, Dict, Any, Optional
 from uuid import uuid4
 
-from backend.mirofish.schemas import Entity, Relationship, EntityType, RelationshipType
+from backend.astra.schemas import Entity, Relationship, EntityType, RelationshipType
 from backend.llm.router import llm_router
 
 logger = logging.getLogger(__name__)

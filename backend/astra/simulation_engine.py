@@ -365,8 +365,8 @@ Provide your analysis as JSON:
         Returns:
             Complete SimulationState with results
         """
-        from backend.mirofish.graph_builder import GraphBuilder
-        from backend.mirofish.persona_generator import PersonaGenerator
+        from backend.astra.graph_builder import GraphBuilder
+        from backend.astra.persona_generator import PersonaGenerator
 
         config = SimulationConfig(
             name=f"{agent_type}_sim_{uuid4().hex[:6]}",

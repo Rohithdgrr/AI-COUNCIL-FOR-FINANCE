@@ -5,7 +5,7 @@ import json
 import re
 from typing import Optional
 
-from backend.mirofish.schemas import SimulationState, SimulationResult
+from backend.astra.schemas import SimulationState, SimulationResult
 from backend.llm.router import llm_router
 
 logger = logging.getLogger(__name__)

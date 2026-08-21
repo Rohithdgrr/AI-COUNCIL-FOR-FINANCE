@@ -6,7 +6,7 @@ import re
 from typing import List, Optional, Dict
 from uuid import uuid4
 
-from backend.mirofish.schemas import (
+from backend.astra.schemas import (
     Entity, Relationship, Persona, PersonaRole, SimulationConfig, EntityType
 )
 from backend.llm.router import llm_router

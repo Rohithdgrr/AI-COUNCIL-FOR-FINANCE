@@ -881,10 +881,10 @@ async def _run_mirofish_swarm(query: str) -> AsyncGenerator[str, None]:
 
     async def _run_mirofish_agent(agent_type: str):
         """Run MiroFish simulation for a single agent, yielding SSE progress events."""
-        from backend.mirofish.simulation_engine import SimulationEngine
-        from backend.mirofish.graph_builder import GraphBuilder
-        from backend.mirofish.persona_generator import PersonaGenerator
-        from backend.mirofish.schemas import SimulationConfig, SimulationState
+        from backend.astra.simulation_engine import SimulationEngine
+        from backend.astra.graph_builder import GraphBuilder
+        from backend.astra.persona_generator import PersonaGenerator
+        from backend.astra.schemas import SimulationConfig, SimulationState
 
         sim_id = f"{agent_type}_sim_{uuid.uuid4().hex[:8]}"
 
@@ -928,7 +928,7 @@ async def _run_mirofish_swarm(query: str) -> AsyncGenerator[str, None]:
 
             # Phase 4: Report
             yield f"data: {json.dumps({'type': 'mirofish_agent_progress', 'agent': agent_type, 'phase': 'report_generation', 'simulation_id': sim_id})}\n\n"
-            from backend.mirofish.report_agent import ReportAgent
+            from backend.astra.report_agent import ReportAgent
             report_agent = ReportAgent()
             report = await report_agent.generate_report(state, report_type="full")
 
