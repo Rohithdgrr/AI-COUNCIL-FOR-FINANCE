@@ -12,10 +12,8 @@ const api = axios.create({
 
 // Request interceptor — attach API key securely
 api.interceptors.request.use((config) => {
-  const apiKey = apiKeyManager.getApiKey()
-  if (apiKey) {
-    config.headers['X-API-Key'] = apiKey
-  }
+  const apiKey = apiKeyManager.getApiKey() || 'dev-key'
+  config.headers['X-API-Key'] = apiKey
   return config
 })
 

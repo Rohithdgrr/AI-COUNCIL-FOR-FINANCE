@@ -1,6 +1,14 @@
 import { apiKeyManager } from './secureStorage'
 
-const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws'
+function resolveWsUrl(): string {
+  if (import.meta.env.VITE_WS_URL) return import.meta.env.VITE_WS_URL
+  if (import.meta.env.PROD) {
+    const backend = 'wss://supplychaingpt-backend.onrender.com'
+    return `${backend}/ws`
+  }
+  return 'ws://localhost:8000/ws'
+}
+const WS_URL = resolveWsUrl()
 
 type EventHandler = (event: WSEvent) => void
 
