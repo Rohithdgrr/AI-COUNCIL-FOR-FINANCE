@@ -1,23 +1,28 @@
+# Render deployment — Backend only (Frontend on Vercel)
+# Docs: https://render.com/docs/blueprint-spec
+# After push to main, Render auto-deploys backend. Set secrets in Render dashboard > Environment.
+
 services:
-  # Backend API Service
   - type: web
     name: supplychaingpt-backend
     runtime: python
+    region: oregon
+    plan: free
+    branch: main
     buildCommand: pip install -r requirements.txt
     startCommand: python start_backend.py
+    healthCheckPath: /health
+    autoDeploy: true
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
       - key: PORT
         value: 8000
+      # CORS — allow Vercel frontend (update with your actual Vercel URL after first deploy)
+      # Use "*" for initial deploy to allow any Vercel preview URL; lock down to specific domain later
       - key: CORS_ORIGINS
-        value: https://supplychaingpt-frontend.onrender.com,http://localhost:3000,http://localhost:5173
-      - key: API_KEYS
-        generateValue: true
-      - key: MCP_API_KEY
-        generateValue: true
-      - key: RATE_LIMIT_PER_MINUTE
-        value: 60
+        value: "*"
+      # App config
       - key: LOG_LEVEL
         value: INFO
       - key: HUMAN_IN_LOOP
@@ -26,19 +31,64 @@ services:
         value: 3
       - key: CONFIDENCE_GAP_THRESHOLD
         value: 20.0
-    # Auto-deploy from main branch
-    autoDeploy: true
-
-  # Frontend Static Site
-  - type: static
-    name: supplychaingpt-frontend
-    runtime: node
-    buildCommand: cd frontend && npm install && npm run build
-    publishDir: frontend/dist
-    envVars:
-      - key: NODE_VERSION
-        value: 20.11.0
-      - key: VITE_API_BASE_URL
-        value: https://supplychaingpt-backend.onrender.com/api
-    # Auto-deploy from main branch
-    autoDeploy: true
+      - key: RATE_LIMIT_PER_MINUTE
+        value: 60
+      # Secrets — set in Render dashboard (Environment tab) — do NOT commit to repo
+      # LLM Providers (at least one required — NVIDIA or OpenRouter recommended)
+      - key: NVIDIA_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: MISTRAL_API_KEY
+        sync: false
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: COHERE_API_KEY
+        sync: false
+      # Databases (Neon PostgreSQL is used; Redis/Neo4j are optional — will warn if not set)
+      - key: NEON_DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: NEO4J_URI
+        sync: false
+      - key: NEO4J_PASSWORD
+        sync: false
+      # External data APIs (all optional — app falls back to simulated data if missing)
+      - key: ALPHA_VANTAGE_API_KEY
+        sync: false
+      - key: POLYGON_API_KEY
+        sync: false
+      - key: TWELVEDATA_API_KEY
+        sync: false
+      - key: FMP_API_KEY
+        sync: false
+      - key: EXCHANGERATE_API_KEY
+        sync: false
+      - key: OPENWEATHERMAP_API_KEY
+        sync: false
+      - key: MEDIASTACK_API_KEY
+        sync: false
+      - key: NOAA_API_KEY
+        sync: false
+      - key: NIST_NVD_API_KEY
+        sync: false
+      - key: CURRENTS_API_KEY
+        sync: false
+      - key: GNEWS_API_KEY
+        sync: false
+      - key: MARKETAUX_API_KEY
+        sync: false
+      - key: GRAPHHOPPER_API_KEY
+        sync: false
+      - key: SHODAN_API_KEY
+        sync: false
+      # Auth (auto-generated on first deploy — copy to Vercel if needed)
+      - key: API_KEYS
+        generateValue: true
+      - key: MCP_API_KEY
+        generateValue: true

@@ -1,5 +1,87 @@
 # Deployment Guide
 
+## Production — Vercel (Frontend) + Render (Backend) ⭐ Recommended
+
+This repo is pre-configured for **Vercel + Render** split deployment (frontend static, backend web service).
+
+### Architecture
+
+```
+GitHub push to main
+    ├─→ Vercel  — builds frontend/ (Vite → dist)  — https://ai-council-for-finance.vercel.app
+    └─→ Render  — builds backend/ (Python)         — https://supplychaingpt-backend.onrender.com
+          health: GET /health
+```
+
+### 1. Backend on Render (Blueprint)
+
+1. Fork/clone this repo to your GitHub.
+2. Go to **https://dashboard.render.com** → **New +** → **Blueprint** → Connect `AI-COUNCIL-FOR-FINANCE` repo.
+3. Render reads `render.yaml` (root) and creates service `supplychaingpt-backend`:
+   - `runtime: python`, `buildCommand: pip install -r requirements.txt`, `startCommand: python start_backend.py`
+   - `healthCheckPath: /health`, `PYTHON_VERSION: 3.11.0`, `PORT: 8000`
+4. In Render dashboard → **Environment** → add secrets (all `sync: false` in `render.yaml`):
+   - **LLM** (at least one required): `NVIDIA_API_KEY` **or** `OPENROUTER_API_KEY` (recommended), `MISTRAL_API_KEY`, `GOOGLE_API_KEY`/`GEMINI_API_KEY`
+   - **DB**: `NEON_DATABASE_URL` (Neon free tier), `REDIS_URL` (optional), `NEO4J_URI`/`NEO4J_PASSWORD` (optional)
+   - **Data APIs** (optional, app falls back to simulated): `ALPHA_VANTAGE_API_KEY`, `POLYGON_API_KEY`, `TWELVEDATA_API_KEY`, `FMP_API_KEY`, `EXCHANGERATE_API_KEY`, etc. (see `.env.example`)
+   - `CORS_ORIGINS` is set to `*` for initial deploy; after Vercel deploy, lock to `https://<your-vercel-url>.vercel.app` for security.
+5. Click **Apply** → wait 3-5 min for build → verify `https://<your-backend>.onrender.com/health` returns `{"status":"ok"}` and `https://<your-backend>.onrender.com/docs` shows Swagger.
+6. Copy backend URL (e.g., `https://supplychaingpt-backend.onrender.com`).
+
+> **CORS note:** `render.yaml` sets `CORS_ORIGINS: "*"` to allow Vercel preview URLs (`https://*.vercel.app`). After first successful deploy, change to your exact Vercel domain in Render dashboard for stricter security.
+
+### 2. Frontend on Vercel
+
+1. Go to **https://vercel.com** → **Add New Project** → Import `AI-COUNCIL-FOR-FINANCE` repo.
+2. **Framework Preset:** `Vite` (auto-detected).
+3. **Root Directory:** leave as `.` (root) — `vercel.json` at root handles `cd frontend && npx vite build`. *Alternatively, set Root Directory to `frontend` and Vercel will use `frontend/vercel.json`.*
+4. **Build & Output:**
+   - `Build Command:` `cd frontend && npm install && npx vite build` (or `npx vite build` if Root Directory is `frontend`)
+   - `Output Directory:` `frontend/dist` (or `dist` if Root Directory is `frontend`)
+   - `Install Command:` `npm install --prefix frontend`
+   - `Framework:` `Vite` — `vercel.json` already sets SPA rewrites (`/(.*)` → `/index.html`) and asset caching.
+5. **Environment Variables** (Vercel dashboard → Settings → Environment Variables):
+   - `VITE_API_BASE_URL` = `https://<your-backend>.onrender.com` (no trailing slash; frontend `src/lib/api.ts` uses this, falls back to `/api` proxy in dev)
+   - Optionally: `VITE_API_KEY` = your `API_KEYS` value from Render (if you set custom auth)
+6. Click **Deploy** → wait 2-3 min → visit `https://<your-project>.vercel.app`.
+
+### 3. Connect Frontend ↔ Backend
+
+- After both deploys, update **Render** `CORS_ORIGINS` to your exact Vercel URL (e.g., `https://ai-council-for-finance.vercel.app`) and redeploy.
+- In **Vercel**, verify `VITE_API_BASE_URL` points to your Render backend.
+
+### 4. Verify Production
+
+```bash
+# Backend health (Render)
+curl https://<your-backend>.onrender.com/health
+# Should return: {"status":"ok", ...}
+
+# Frontend (Vercel) — open in browser, check:
+# - Dashboard loads, forex rates and commodity prices stream (or show simulated fallback)
+# - Council Chat → send query → streams 7 agents + debate + Astra Swarm Array
+# - Astra Swarm Array at /rag shows 8-20 personas
+```
+
+### 5. Alternative: Full Render (if you prefer Render for both)
+
+`render.yaml` is backend-only. To also host frontend on Render, re-add the `static` service:
+
+```yaml
+  - type: static
+    name: supplychaingpt-frontend
+    runtime: node
+    buildCommand: cd frontend && npm install && npx vite build
+    publishDir: frontend/dist
+    envVars:
+      - key: VITE_API_BASE_URL
+        value: https://supplychaingpt-backend.onrender.com
+```
+
+Then remove `vercel.json` or keep both.
+
+---
+
 ## Prerequisites
 
 - **Python** 3.12+
